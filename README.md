@@ -1,0 +1,160 @@
+# DevNotes
+
+DevNotes is an ultra-fast, lightweight, offline-first Markdown editor for macOS and iOS visually inspired by the early Drafts app. It features a sleek dark color scheme with blue highlights, a collapsible file list, regex-supported search, outline editing tools, and real-time iCloud synchronization via CloudKit with visual conflict resolution.
+
+## Features
+
+- **Drafts-Inspired Dark Theme:** Visual styling focuses on a clean dark mode with blue highlights to keep focus on writing.
+- **Ultra-Fast Launch:** Boots to interactive state in under 1 second on Apple Silicon.
+- **Collapsible Sidebar:** Toggle the list of notes sorted by modification date using `Cmd-B` (also under the **View** menu).
+- **Opens Where You Left Off:** On launch DevNotes selects the note at the top of the list and places the caret at the **first** or **last** line — your choice in Settings.
+- **Sidebar Context Menu:** Right-click any note to **Pin to Top** (pinned notes float above the date-sorted list) or **Delete** it. Deletes move the file to the system **Trash**, so they're recoverable.
+- **View Menu Controls:** Toggle **Wrap Text** and a **line-number gutter**, and switch between **System / Light / Dark** themes.
+- **Export & Print:** From the **File** menu, export the open note as **Markdown** or **plain text**, or **Save as PDF** (rendered with your editor styling).
+- **Regex Search:** Advanced search supporting regular expressions, whole-word filtering, and case-sensitivity.
+- **Outline Editing Tools:** Built-in actions to toggle bullets and numbered lists (with continuous auto-formatting), indent and outdent lines, increment/decrement headings, and move lines up or down.
+- **iCloud CloudKit Sync:** Automatic background synchronization with offline storage support (degrades gracefully to local storage if iCloud is unavailable).
+- **Visual Conflict Merge:** Resolve sync conflicts using a side-by-side view on macOS and an inline view on iOS.
+- **Sanitized Custom CSS Styling:** Apply custom formatting to the editor text area via a safe, parsed set of CSS-like properties applied to the native TextKit 2 renderer.
+
+## Architecture
+
+ The project is structured as a Swift Package with two primary targets to enforce strict division of concerns:
+
+1. **`DevNotesCore`:** A pure, platform-independent library containing all core domain logic. It has zero dependencies on AppKit, UIKit, SwiftUI, CloudKit, or file/network I/O, allowing for a fully deterministic and headless test suite.
+   - **`Outline`:** Handles outline command applications (bullet/number toggling, indenting, moving lines, heading levels, and list continuations).
+   - **`Diff` & `Merge`:** Implements Longest Common Subsequence (LCS) diffing, 3-way merge logic, and side-by-side/inline highlight generation.
+   - **`Search`:** Evaluates regex, case sensitivity, and whole-word matching logic.
+   - **`Style`:** Parses and sanitizes custom stylesheet configurations against a strict blocklist/allowlist.
+   - **`Model` & `Repository`:** Handles entities like `Note` and `Conflict` along with the in-memory fake repositories for testing.
+
+2. **`DevNotesApp`:** The SwiftUI shell targets macOS and iOS, linking `DevNotesCore` and implementing native platform controls.
+   - **`App` & `Storage`:** Implements `AppModel` and `FileNoteStore` for file-system storage under the iCloud ubiquity folder, wrapping `NSFileVersion` for conflict detection.
+   - **`Editor`:** Builds a native TextKit 2 `NSTextView` / `UITextView` wrapper, avoiding WebViews for extreme efficiency.
+   - **`Sync`:** Encapsulates `CloudKitSyncService`, isolating CloudKit dependencies to a single file.
+
+## Getting Started
+
+### Prerequisites
+
+- Swift 6.0 / Xcode 15+ (Xcode 26.6 / Swift 6.3.3 recommended)
+- macOS 14.0+ / iOS 17.0+
+- XcodeGen (optional, for regenerating the Xcode project file)
+
+### Generating the Xcode Project
+
+An Xcode wrapper is required to build the app with iCloud entitlements and signing. You can generate or regenerate the project file using XcodeGen:
+
+```bash
+xcodegen generate
+```
+
+This reads the `project.yml` configuration and creates `DevNotes.xcodeproj`.
+
+### Building and Running
+
+You can build the project from the terminal via Swift Package Manager:
+
+```bash
+# Build the package
+swift build
+
+# Run unit and performance tests
+swift test
+```
+
+For full App Store packaging, signing, and iCloud capability support, open `DevNotes.xcodeproj` in Xcode, select your Apple Developer Team ID in the signing settings, and build the target.
+
+## Editor Style: How To Use It
+
+The **Editor Style** box in Settings lets you restyle the writing area without touching a config file — and without the risk of real CSS. You write one `token: value` declaration per line (semicolons also work as separators). Only the tokens in the catalog below are honoured; **anything else is quietly ignored and never executed** — this is a sanitized token set applied to the native TextKit 2 renderer, not a stylesheet run in a WebView.
+
+**How to apply a style:**
+
+1. Open **DevNotes → Settings** (`Cmd-,`).
+2. Type or paste declarations into the outlined **Editor Style** box, or click **Insert Example** to drop in a starter stylesheet.
+3. Changes apply live as you type. Any line DevNotes couldn't use is listed in orange with the reason (e.g. `unknown token`, `invalid value`), so you always know what was skipped.
+
+### Examples
+
+**Minimal — bump the size and soften the text color:**
+
+```css
+font-size: 16
+text-color: #d0d0d0
+```
+
+**Comfortable reading — larger type with generous spacing:**
+
+```css
+font-family: "SF Pro Text"
+font-size: 17
+line-spacing: 6
+paragraph-spacing: 14
+heading-color: #3b82f6
+```
+
+**Dracula-inspired dark theme:**
+
+```css
+font-family: "Courier New"
+font-size: 15px
+font-weight: regular
+text-color: #f8f8f2
+background-color: #282a36
+accent-color: #bd93f9
+line-spacing: 6
+paragraph-spacing: 14
+heading1-size: 26
+heading2-size: 22
+heading3-size: 18
+heading-color: #ff79c6
+```
+
+**High-contrast large print:**
+
+```css
+font-size: 22
+font-weight: semibold
+text-color: #ffffff
+heading-color: #ffd166
+line-spacing: 8
+```
+
+## CSS Customization Catalog
+
+DevNotes supports personalizing the text area rendering using a sanitized CSS-like syntax. These settings are applied directly to the native TextKit 2 text container (not a WebView) for optimal performance and safety. Any properties or syntax not matching the exact keys below will be safely rejected by the sanitization engine.
+
+| CSS Property | Supported Values | Description | Example |
+|---|---|---|---|
+| `font-family` | System font names | Sets the typeface family used in the text area. | `font-family: Menlo` |
+| `font-size` | Numeric values with units (`px`, `pt`, `em`, `rem`) | Sets the baseline font size (between 1 and 400). | `font-size: 14pt` |
+| `font-weight` | Name (`thin`, `light`, `regular`, `medium`, `semibold`, `bold`, `heavy`, `black`) or Number (`1`–`1000`) | Configures the thickness of the typeface. | `font-weight: semibold` |
+| `text-color` | Hexadecimal color code (`#rgb`, `#rrggbb`, `#rrggbbaa`) | Configures the default text color. | `text-color: #e0e0e0` |
+| `background-color` | Hexadecimal color code (`#rgb`, `#rrggbb`, `#rrggbbaa`) | Configures the text area background. | `background-color: #121212` |
+| `accent-color` | Hexadecimal color code (`#rgb`, `#rrggbb`, `#rrggbbaa`) | Configures UI accent coloring. | `accent-color: #007aff` |
+| `line-spacing` | Positive numeric values | Configures space between lines of text. | `line-spacing: 4` |
+| `paragraph-spacing` | Positive numeric values | Configures space between paragraphs. | `paragraph-spacing: 12` |
+| `heading1-size` | Positive numeric values | Font size for Level 1 headings (`#`). | `heading1-size: 24` |
+| `heading2-size` | Positive numeric values | Font size for Level 2 headings (`##`). | `heading2-size: 20` |
+| `heading3-size` | Positive numeric values | Font size for Level 3 headings (`###`). | `heading3-size: 18` |
+| `heading-color` | Hexadecimal color code (`#rgb`, `#rrggbb`, `#rrggbbaa`) | Sets a specific color for all markdown headings. | `heading-color: #3b82f6` |
+
+### CSS Example
+
+Here is a full styling stylesheet configuration you can paste into the DevNotes settings pane:
+
+```css
+font-family: "Courier New";
+font-size: 15px;
+font-weight: regular;
+text-color: #f8f8f2;
+background-color: #282a36;
+accent-color: #bd93f9;
+line-spacing: 6;
+paragraph-spacing: 14;
+heading1-size: 26;
+heading2-size: 22;
+heading3-size: 18;
+heading-color: #ff79c6;
+```

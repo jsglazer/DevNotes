@@ -15,15 +15,32 @@ struct SidebarView: View {
                 set: { id in if let id { Task { await model.select(id) } } }
             )) {
                 ForEach(model.visibleSummaries) { summary in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(summary.title)
-                            .font(.body.weight(.medium))
-                            .lineLimit(1)
-                        Text(summary.modifiedAt, style: .date)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        if model.isPinned(summary.id) {
+                            Image(systemName: "pin.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(summary.title)
+                                .font(.body.weight(.medium))
+                                .lineLimit(1)
+                            Text(summary.modifiedAt, style: .date)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .tag(summary.id)
+                    .contextMenu {
+                        Button(model.isPinned(summary.id) ? "Unpin" : "Pin to Top",
+                               systemImage: model.isPinned(summary.id) ? "pin.slash" : "pin") {
+                            model.togglePin(summary.id)
+                        }
+                        Divider()
+                        Button("Delete", systemImage: "trash", role: .destructive) {
+                            Task { await model.delete(summary.id) }
+                        }
+                    }
                 }
             }
             .listStyle(.sidebar)

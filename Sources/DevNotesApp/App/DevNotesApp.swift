@@ -29,6 +29,12 @@ struct DevNotesApp: App {
             ContentView(model: model)
         }
         #if os(macOS)
+        .commands {
+            AppCommands(model: model)
+        }
+        #endif
+
+        #if os(macOS)
         Settings {
             SettingsView(model: model)
         }

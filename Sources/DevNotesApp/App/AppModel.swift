@@ -17,6 +17,23 @@ public enum AppTheme: String, CaseIterable, Sendable {
     }
 }
 
+/// Where the caret lands when a note is opened (Settings-controlled).
+public enum OpenJump: String, CaseIterable, Sendable {
+    case firstLine
+    case lastLine
+}
+
+/// UserDefaults keys for the small set of persisted UI preferences. Notes themselves are never
+/// stored here — only view/editor preferences.
+private enum PreferenceKey {
+    static let theme = "devnotes.theme"
+    static let styleInput = "devnotes.styleInput"
+    static let openJump = "devnotes.openJump"
+    static let wrapText = "devnotes.wrapText"
+    static let showLineNumbers = "devnotes.showLineNumbers"
+    static let pinned = "devnotes.pinnedIDs"
+}
+
 /// The composition root and app-wide state. It owns the injected `NoteRepository` and
 /// `SyncService` (no singletons) and is the ONLY place note I/O is initiated — SwiftUI views
 /// bind to this and never fetch through anything else. Sync is started lazily, off the launch
@@ -26,28 +43,65 @@ public enum AppTheme: String, CaseIterable, Sendable {
 public final class AppModel {
     private let repository: NoteRepository
     private let sync: SyncService
+    @ObservationIgnored private let defaults: UserDefaults
 
     public private(set) var summaries: [NoteSummary] = []
     public var selectedID: NoteID?
     public var searchQuery = ""
     public var searchOptions = SearchOptions()
-    public var styleInput = ""
-    public var theme: AppTheme = .dark
+    public var styleInput = "" { didSet { defaults.set(styleInput, forKey: PreferenceKey.styleInput) } }
+    public var theme: AppTheme = .dark { didSet { defaults.set(theme.rawValue, forKey: PreferenceKey.theme) } }
+
+    /// View/editor preferences surfaced in the View menu and honoured by the editor surface.
+    public var openJump: OpenJump = .firstLine { didSet { defaults.set(openJump.rawValue, forKey: PreferenceKey.openJump) } }
+    public var wrapText = true { didSet { defaults.set(wrapText, forKey: PreferenceKey.wrapText) } }
+    public var showLineNumbers = false { didSet { defaults.set(showLineNumbers, forKey: PreferenceKey.showLineNumbers) } }
+
+    /// Sidebar collapse state, owned here so both the ⌘B toolbar button and the View menu drive
+    /// the same source of truth.
+    public var columnVisibility: NavigationSplitViewVisibility = .all
+
+    /// Notes the user pinned to the top of the list. Stored as raw file names.
+    public private(set) var pinnedIDs: Set<String> = []
+
     public private(set) var conflicts: [ConflictRecord] = []
     public let editor = EditorViewModel()
 
     private var saveTask: Task<Void, Never>?
 
-    public init(repository: NoteRepository, sync: SyncService) {
+    public init(repository: NoteRepository, sync: SyncService, defaults: UserDefaults = .standard) {
         self.repository = repository
         self.sync = sync
+        self.defaults = defaults
+        loadPreferences()
         editor.setOnChange { [weak self] _ in self?.scheduleSave() }
     }
 
-    /// Notes to show, filtered by the search bar. Order (modified-date) is preserved.
-    public var visibleSummaries: [NoteSummary] {
-        SearchEngine.filter(summaries, query: searchQuery, options: searchOptions)
+    private func loadPreferences() {
+        if let raw = defaults.string(forKey: PreferenceKey.theme), let value = AppTheme(rawValue: raw) {
+            theme = value
+        }
+        styleInput = defaults.string(forKey: PreferenceKey.styleInput) ?? ""
+        if let raw = defaults.string(forKey: PreferenceKey.openJump), let value = OpenJump(rawValue: raw) {
+            openJump = value
+        }
+        if defaults.object(forKey: PreferenceKey.wrapText) != nil {
+            wrapText = defaults.bool(forKey: PreferenceKey.wrapText)
+        }
+        showLineNumbers = defaults.bool(forKey: PreferenceKey.showLineNumbers)
+        pinnedIDs = Set(defaults.stringArray(forKey: PreferenceKey.pinned) ?? [])
     }
+
+    /// Notes to show: search-filtered, then pinned notes hoisted to the top (each group keeps the
+    /// modified-date order the repository already produced).
+    public var visibleSummaries: [NoteSummary] {
+        let filtered = SearchEngine.filter(summaries, query: searchQuery, options: searchOptions)
+        let pinned = filtered.filter { pinnedIDs.contains($0.id.rawValue) }
+        let rest = filtered.filter { pinnedIDs.contains($0.id.rawValue) == false }
+        return pinned + rest
+    }
+
+    public func isPinned(_ id: NoteID) -> Bool { pinnedIDs.contains(id.rawValue) }
 
     public var styleSheet: StyleSheet {
         StyleSanitizer.sanitize(styleInput)
@@ -59,6 +113,13 @@ public final class AppModel {
     public func bootstrap() async {
         await refresh()
         editor.style = styleSheet
+        await selectFirstIfNeeded()
+    }
+
+    /// On open, land on the note at the top of the list so the user starts editing immediately.
+    public func selectFirstIfNeeded() async {
+        guard selectedID == nil, let first = visibleSummaries.first else { return }
+        await select(first.id)
     }
 
     /// Lazily starts sync after first paint; safe to call more than once.
@@ -69,6 +130,10 @@ public final class AppModel {
 
     public func refresh() async {
         summaries = (try? await repository.summaries()) ?? []
+        // Drop pins whose files no longer exist so the set can't grow stale forever.
+        let live = Set(summaries.map(\.id.rawValue))
+        let pruned = pinnedIDs.intersection(live)
+        if pruned != pinnedIDs { setPinned(pruned) }
     }
 
     // MARK: - Selection & editing
@@ -77,8 +142,18 @@ public final class AppModel {
         selectedID = id
         guard let note = try? await repository.load(id) else { return }
         editor.text = note.body
-        editor.selection = .caret(0)
+        editor.selection = caretForOpen(in: note.body)
         editor.style = styleSheet
+    }
+
+    /// Resolves the initial caret for a freshly opened note per the Settings jump preference.
+    private func caretForOpen(in body: String) -> DevNotesCore.TextSelection {
+        switch openJump {
+        case .firstLine:
+            return .caret(0)
+        case .lastLine:
+            return .caret((body as NSString).length)
+        }
     }
 
     public func newNote() async {
@@ -92,10 +167,43 @@ public final class AppModel {
 
     public func deleteSelected() async {
         guard let id = selectedID else { return }
+        await delete(id)
+    }
+
+    /// Deletes a specific note (used by the sidebar context menu). The file store moves it to the
+    /// system Trash rather than erasing it, so a mistaken delete is recoverable.
+    public func delete(_ id: NoteID) async {
         try? await repository.delete(id)
-        selectedID = nil
-        editor.text = ""
+        if selectedID == id {
+            selectedID = nil
+            editor.text = ""
+        }
+        if pinnedIDs.contains(id.rawValue) {
+            setPinned(pinnedIDs.subtracting([id.rawValue]))
+        }
         await refresh()
+    }
+
+    // MARK: - Pinning
+
+    public func togglePin(_ id: NoteID) {
+        let raw = id.rawValue
+        if pinnedIDs.contains(raw) {
+            setPinned(pinnedIDs.subtracting([raw]))
+        } else {
+            setPinned(pinnedIDs.union([raw]))
+        }
+    }
+
+    private func setPinned(_ ids: Set<String>) {
+        pinnedIDs = ids
+        defaults.set(Array(ids), forKey: PreferenceKey.pinned)
+    }
+
+    // MARK: - Sidebar
+
+    public func toggleSidebar() {
+        columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
     }
 
     /// Debounced whole-note save (the sync unit is the whole note, written on pause).

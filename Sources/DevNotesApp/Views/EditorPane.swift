@@ -15,7 +15,9 @@ struct EditorPane: View {
                 MarkdownTextView(
                     text: Binding(get: { model.editor.text }, set: { model.editor.text = $0 }),
                     selection: Binding(get: { model.editor.selection }, set: { model.editor.selection = $0 }),
-                    style: model.styleSheet
+                    style: model.styleSheet,
+                    wrapText: model.wrapText,
+                    showLineNumbers: model.showLineNumbers
                 )
             }
         }

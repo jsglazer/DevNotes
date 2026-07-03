@@ -5,10 +5,9 @@ import SwiftUI
 /// sheet when sync reports one.
 struct ContentView: View {
     @Bindable var model: AppModel
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        NavigationSplitView(columnVisibility: $model.columnVisibility) {
             SidebarView(model: model)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 260, max: 360)
         } detail: {
@@ -17,11 +16,11 @@ struct ContentView: View {
         .toolbar {
             ToolbarItem {
                 Button {
-                    withAnimation { toggleSidebar() }
+                    withAnimation { model.toggleSidebar() }
                 } label: {
                     Label("Toggle Sidebar", systemImage: "sidebar.left")
                 }
-                .keyboardShortcut("b", modifiers: .command)
+                // ⌘B is owned by the View-menu command so the shortcut isn't double-bound.
             }
         }
         .task {
@@ -43,9 +42,5 @@ struct ContentView: View {
             get: { model.conflicts.first },
             set: { _ in }
         )
-    }
-
-    private func toggleSidebar() {
-        columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
     }
 }

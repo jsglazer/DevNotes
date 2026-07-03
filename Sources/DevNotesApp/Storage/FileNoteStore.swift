@@ -80,10 +80,21 @@ public actor FileNoteStore: NoteRepository {
         try note.body.data(using: .utf8)?.write(to: fileURL, options: [.atomic])
     }
 
+    /// Deletes a note by moving its file to the system Trash (recoverable) rather than erasing it.
+    /// Falls back to a hard remove only if the platform has no Trash (e.g. a sandbox without the
+    /// user-selected-files entitlement), so a delete always succeeds.
     public func delete(_ id: NoteID) async throws {
         let fileURL = url(for: id)
         guard fileManager.fileExists(atPath: fileURL.path) else { throw RepositoryError.notFound(id) }
+        #if os(macOS)
+        do {
+            try fileManager.trashItem(at: fileURL, resultingItemURL: nil)
+        } catch {
+            try fileManager.removeItem(at: fileURL)
+        }
+        #else
         try fileManager.removeItem(at: fileURL)
+        #endif
     }
 
     // MARK: - Conflict capture

@@ -28,6 +28,9 @@ let package = Package(
         .executableTarget(
             name: "DevNotesApp",
             dependencies: ["DevNotesCore"],
+            resources: [
+                .process("Resources")
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6)
             ]
