@@ -1,0 +1,21 @@
+disabled_rules:
+  - todo
+opt_in_rules:
+  - empty_count
+  - force_unwrapping
+  - explicit_init
+included:
+  - Sources
+excluded:
+  - .build
+force_unwrapping:
+  severity: error
+line_length:
+  warning: 140
+  error: 200
+identifier_name:
+  min_length: 1
+type_body_length:
+  warning: 400
+file_length:
+  warning: 600
