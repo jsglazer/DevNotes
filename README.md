@@ -1,5 +1,7 @@
 # DevNotes
 
+[![GitHub release](https://img.shields.io/github/v/release/jsglazer/DevNotes?logo=github)](https://github.com/jsglazer/DevNotes/releases) [![Swift 6.0](https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white)](https://swift.org) [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/jsglazer/DevNotes/blob/main/LICENSE) [![Made with Claude](https://img.shields.io/badge/Made_with-Claude-D97756?logo=anthropic)](https://claude.ai) [![Gemini Flash Antigravity](https://img.shields.io/badge/Gemini%20Flash-Antigravity-4f86f7?logo=google-gemini&logoColor=white)](https://github.com/google-gemini) [![CI](https://github.com/jsglazer/DevNotes/actions/workflows/ci.yml/badge.svg)](https://github.com/jsglazer/DevNotes/actions/workflows/ci.yml) [![CodeQL](https://github.com/jsglazer/DevNotes/actions/workflows/codeql.yml/badge.svg)](https://github.com/jsglazer/DevNotes/actions/workflows/codeql.yml) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/jsglazer/DevNotes/badge)](https://securityscorecards.dev/viewer/?uri=github.com/jsglazer/DevNotes)
+
 DevNotes is an ultra-fast, lightweight, offline-first Markdown editor for macOS and iOS visually inspired by the early Drafts app. It features a sleek dark color scheme with blue highlights, a collapsible file list, regex-supported search, outline editing tools, and real-time iCloud synchronization via CloudKit with visual conflict resolution.
 
 ## Features
