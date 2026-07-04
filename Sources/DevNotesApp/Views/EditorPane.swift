@@ -10,8 +10,10 @@ struct EditorPane: View {
             if model.selectedID == nil {
                 ContentUnavailablePlaceholder()
             } else {
+                #if os(macOS)
                 EditorToolbar(editor: model.editor)
                 Divider()
+                #endif
                 MarkdownTextView(
                     text: Binding(get: { model.editor.text }, set: { model.editor.text = $0 }),
                     selection: Binding(get: { model.editor.selection }, set: { model.editor.selection = $0 }),

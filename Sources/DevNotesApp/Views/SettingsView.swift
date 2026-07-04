@@ -69,7 +69,11 @@ struct SettingsView: View {
                         Spacer()
                         Button("Insert Example") { model.styleInput = Self.exampleStyle }
                             .font(.caption)
+                            #if os(macOS)
                             .buttonStyle(.link)
+                            #else
+                            .buttonStyle(.borderless)
+                            #endif
                     }
                     Text(Self.exampleStyle)
                         .font(.caption.monospaced())

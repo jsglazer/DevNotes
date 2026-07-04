@@ -23,7 +23,7 @@ struct SidebarView: View {
                         }
                         VStack(alignment: .leading, spacing: 2) {
                             Text(summary.title)
-                                .font(.body.weight(.medium))
+                                .font(.body.bold())
                                 .lineLimit(1)
                             Text(summary.modifiedAt, style: .date)
                                 .font(.caption)

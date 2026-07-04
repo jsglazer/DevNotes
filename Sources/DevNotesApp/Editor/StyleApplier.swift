@@ -17,6 +17,17 @@ struct StyleApplier {
     var baseFontSize: CGFloat = 14
     var baseFontName: String = "Menlo"
 
+    /// Fallback text color when the style sheet has no explicit `textColor` token — must be a
+    /// dynamic system color so it stays legible when the theme switches (a fixed color left
+    /// typed text black-on-black in dark mode).
+    private static var defaultTextColor: PlatformColor {
+        #if os(macOS)
+        return NSColor.textColor
+        #elseif os(iOS)
+        return UIColor.label
+        #endif
+    }
+
     /// Body typography attributes derived from the sheet.
     func bodyAttributes(from sheet: StyleSheet) -> [NSAttributedString.Key: Any] {
         var attributes: [NSAttributedString.Key: Any] = [:]
@@ -25,9 +36,7 @@ struct StyleApplier {
         let family = familyToken(sheet[.fontFamily]) ?? baseFontName
         attributes[.font] = makeFont(name: family, size: size, weight: sheet[.fontWeight])
 
-        if let color = colorToken(sheet[.textColor]) {
-            attributes[.foregroundColor] = color
-        }
+        attributes[.foregroundColor] = colorToken(sheet[.textColor]) ?? Self.defaultTextColor
 
         let paragraph = NSMutableParagraphStyle()
         if let lineSpacing = sizeToken(sheet[.lineSpacing]) {

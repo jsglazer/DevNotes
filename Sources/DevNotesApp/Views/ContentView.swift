@@ -1,12 +1,28 @@
 import DevNotesCore
 import SwiftUI
 
-/// Root layout: collapsible sidebar (⌘B) + editor pane, with the conflict merge surfaced as a
-/// sheet when sync reports one.
+/// Root layout.
+/// - macOS: collapsible sidebar (⌘B) + editor pane, conflict merge surfaced as a sheet.
+/// - iOS: single-pane editor with a floating top bar; the note list and outline tools are
+///   presented as sheets rather than a split view, since NavigationSplitView's compact-width
+///   collapse behaviour doesn't give a usable phone layout for this app.
 struct ContentView: View {
     @Bindable var model: AppModel
+    #if os(iOS)
+    @State private var isNotesListPresented = false
+    @State private var isOutlineToolsPresented = false
+    #endif
 
     var body: some View {
+        #if os(macOS)
+        macBody
+        #else
+        iosBody
+        #endif
+    }
+
+    #if os(macOS)
+    private var macBody: some View {
         NavigationSplitView(columnVisibility: $model.columnVisibility) {
             SidebarView(model: model)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 260, max: 360)
@@ -36,6 +52,47 @@ struct ContentView: View {
         }
         .preferredColorScheme(model.theme.colorScheme)
     }
+    #else
+    private var iosBody: some View {
+        EditorPane(model: model)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                IOSTopBar(
+                    editor: model.editor,
+                    onShowNotes: { isNotesListPresented = true },
+                    onNewNote: { Task { await model.newNote() } },
+                    onOutlineTools: { isOutlineToolsPresented = true }
+                )
+            }
+            .sheet(isPresented: $isNotesListPresented) {
+                NavigationStack {
+                    SidebarView(model: model)
+                        .navigationTitle("Notes")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { isNotesListPresented = false }
+                            }
+                        }
+                }
+            }
+            .sheet(isPresented: $isOutlineToolsPresented) {
+                EditorToolbar(editor: model.editor)
+                    .padding()
+                    .presentationDetents([.height(90)])
+            }
+            .onChange(of: model.selectedID) { _, _ in isNotesListPresented = false }
+            .task {
+                await model.bootstrap()
+                await model.startSyncIfNeeded()
+            }
+            .sheet(item: firstConflict) { conflict in
+                MergeView(conflict: conflict) { mergedBody in
+                    Task { await model.resolveConflict(conflict.id, mergedBody: mergedBody) }
+                }
+            }
+            .preferredColorScheme(model.theme.colorScheme)
+    }
+    #endif
 
     private var firstConflict: Binding<ConflictRecord?> {
         Binding(
@@ -44,3 +101,55 @@ struct ContentView: View {
         )
     }
 }
+
+#if os(iOS)
+/// The floating top bar for the iOS editor screen: note-list + new-note circles on the left,
+/// a heading/search pill in the center, and outline-tool access on the right — DevNotes'
+/// equivalent of the reference app's toolbar, mapped onto this app's actual feature set (no
+/// tags exist in DevNotesCore, so there's no tag row here).
+private struct IOSTopBar: View {
+    var editor: EditorViewModel
+    var onShowNotes: () -> Void
+    var onNewNote: () -> Void
+    var onOutlineTools: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            circleButton("doc.text", action: onShowNotes)
+            circleButton("plus", action: onNewNote)
+            Spacer()
+            HStack(spacing: 18) {
+                Menu {
+                    ForEach(0 ... 3, id: \.self) { level in
+                        Button(level == 0 ? "Body" : "Heading \(level)") { editor.setHeading(level) }
+                    }
+                } label: {
+                    Image(systemName: "chevron.down")
+                }
+                Button(action: onShowNotes) {
+                    Image(systemName: "magnifyingglass")
+                    // Search lives inside the notes-list sheet; this jumps straight there.
+                }
+            }
+            .font(.system(size: 16, weight: .medium))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Capsule().fill(Color.gray.opacity(0.15)))
+            Spacer()
+            circleButton("textformat.size", action: onOutlineTools)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private func circleButton(_ systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 17, weight: .medium))
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(Color.gray.opacity(0.15)))
+        }
+    }
+}
+#endif
