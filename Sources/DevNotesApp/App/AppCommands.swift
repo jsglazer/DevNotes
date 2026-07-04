@@ -29,6 +29,13 @@ struct AppCommands: Commands {
 
             Divider()
 
+            Button("Previous Note") { Task { await model.selectPrevious() } }
+                .keyboardShortcut(.upArrow, modifiers: [.command, .shift])
+            Button("Next Note") { Task { await model.selectNext() } }
+                .keyboardShortcut(.downArrow, modifiers: [.command, .shift])
+
+            Divider()
+
             Toggle("Wrap Text", isOn: $model.wrapText)
             Toggle("Show Line Numbers", isOn: $model.showLineNumbers)
 

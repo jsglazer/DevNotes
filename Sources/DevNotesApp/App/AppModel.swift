@@ -156,6 +156,32 @@ public final class AppModel {
         }
     }
 
+    /// Moves selection to the note one row **up** in the visible list (Shift-⌘-↑). No-ops at the
+    /// top. With nothing selected yet, lands on the first note so the shortcut always does something.
+    public func selectPrevious() async {
+        let list = visibleSummaries
+        guard let current = selectedID,
+              let index = list.firstIndex(where: { $0.id == current }) else {
+            if let first = list.first { await select(first.id) }
+            return
+        }
+        guard index > 0 else { return }
+        await select(list[index - 1].id)
+    }
+
+    /// Moves selection to the note one row **down** in the visible list (Shift-⌘-↓). No-ops at the
+    /// bottom. With nothing selected yet, lands on the first note.
+    public func selectNext() async {
+        let list = visibleSummaries
+        guard let current = selectedID,
+              let index = list.firstIndex(where: { $0.id == current }) else {
+            if let first = list.first { await select(first.id) }
+            return
+        }
+        guard index < list.count - 1 else { return }
+        await select(list[index + 1].id)
+    }
+
     public func newNote() async {
         let id = NoteID("\(UUID().uuidString).md")
         let now = Date()
