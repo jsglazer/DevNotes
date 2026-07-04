@@ -33,6 +33,21 @@ DevNotes is an ultra-fast, lightweight, offline-first Markdown editor for macOS 
    - **`Editor`:** Builds a native TextKit 2 `NSTextView` / `UITextView` wrapper, avoiding WebViews for extreme efficiency.
    - **`Sync`:** Encapsulates `CloudKitSyncService`, isolating CloudKit dependencies to a single file.
 
+## Where Your Notes Live (iCloud Sync)
+
+DevNotes stores each note as a single Markdown (`.md`) file inside its **own app-specific iCloud container** (`iCloud.com.jsglazer.DevNotes`), not in the general iCloud Drive folder. On macOS that path is:
+
+```
+~/Library/Mobile Documents/iCloud~com~jsglazer~DevNotes/Documents/
+```
+
+iCloud syncs those files between every signed-in device automatically (file-level ubiquitous sync); `CloudKitSyncService` sits on top only for conflict detection and, on device builds, push subscriptions. If iCloud is unavailable the app falls back to `~/Library/Application Support/DevNotes/` and keeps working offline, syncing when the connection returns.
+
+**Why don't I see a `DevNotes` folder in iCloud Drive / Finder?** Two reasons, both expected:
+
+1. The container directory is created **lazily the first time the signed app launches** while you're signed into iCloud — it won't exist before then.
+2. An app's iCloud container is **hidden from the Finder iCloud Drive UI by default**. Surfacing it as a browsable folder requires declaring `NSUbiquitousContainers` with `NSUbiquitousContainerIsDocumentScopePublic = true` in the app's `Info.plist`. DevNotes doesn't do this — sync still works exactly the same; the files simply live under the app-specific Mobile Documents path above (which you can still open directly in Finder with **Go → Go to Folder…**) rather than appearing in the iCloud Drive sidebar.
+
 ## Getting Started
 
 ### Prerequisites
