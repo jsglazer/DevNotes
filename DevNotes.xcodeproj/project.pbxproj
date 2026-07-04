@@ -7,42 +7,42 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0B36FF2D2A21B627B142B544 /* StyleApplier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 266C558014E2ED98542A0B55 /* StyleApplier.swift */; };
+		009A70C087CFC5D44DEC4A6C /* MarkdownTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71566D09682A6781E0210572 /* MarkdownTextView.swift */; };
 		0D7A5F0D39AA6A259897CAC3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1A860FB05EAB52091F7E732 /* Assets.xcassets */; };
 		10E59DDA89053657AA718BC4 /* DevNotesCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9797B87FF1EB21760926BBF1 /* DevNotesCore */; };
 		1F9515B7D040E76C0EBDB02F /* CloudKitSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05BDA9F5F7B3A8E23672923 /* CloudKitSyncService.swift */; };
+		24A8DD2CBDE0E51E9540D0FD /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 966D8EE4084AE8B2A77F02E7 /* ContentView.swift */; };
 		28B4CC099FC6294C920A6FDA /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07E21273C76AF127D488862A /* SidebarView.swift */; };
+		35D096337F96DB28B3CA0944 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78AFA6F523DB880932AA9022 /* SettingsView.swift */; };
 		37F78C743F15704ADFC2BC1C /* EditorPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = E34663D339352B81822546F8 /* EditorPane.swift */; };
-		3950067C77C9132D8C5BCF86 /* FileNoteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A24629D5B796D7A3F7C5DCC1 /* FileNoteStore.swift */; };
-		3A3B2DD06483ACC553778118 /* Exporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE46C25B88AA794F2EC223B5 /* Exporter.swift */; };
+		3999A5AF8F3EA37B02A52A32 /* StyleApplier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 266C558014E2ED98542A0B55 /* StyleApplier.swift */; };
+		3A4D4B516AE77E8EB92786C7 /* Exporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE46C25B88AA794F2EC223B5 /* Exporter.swift */; };
 		3DB0DFA733FB3313B9B37AF5 /* FileNoteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A24629D5B796D7A3F7C5DCC1 /* FileNoteStore.swift */; };
 		42A21882CDC652F4C7551BFF /* MergeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2F0B1922CE23BDBCA098662 /* MergeView.swift */; };
-		485CFF9F131BF607E0AF07EC /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78AFA6F523DB880932AA9022 /* SettingsView.swift */; };
-		486FE6D99AFA7771C2CF34DE /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 966D8EE4084AE8B2A77F02E7 /* ContentView.swift */; };
+		44E61C1935A81DAD293CF26D /* EditorPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = E34663D339352B81822546F8 /* EditorPane.swift */; };
+		49283FCC05EBB80EEFA1E97C /* FileNoteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A24629D5B796D7A3F7C5DCC1 /* FileNoteStore.swift */; };
+		4F7FA118EA4D5D74BF8A1A51 /* EditorToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03974BA7354B2EECDAEE9388 /* EditorToolbar.swift */; };
 		53A1D1B351449AEA9F059851 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 966D8EE4084AE8B2A77F02E7 /* ContentView.swift */; };
-		53E72C793A2443193DAC618E /* AppCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54443370DFE141913BD80CE1 /* AppCommands.swift */; };
-		5E4E1F175803EB4E9A3E0797 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EECFD32311AD536926457D89 /* AppModel.swift */; };
+		54B34B0EB085B6FBD9E0D1E9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1A860FB05EAB52091F7E732 /* Assets.xcassets */; };
+		5BA5DF0D50244B5E12621C5E /* DevNotesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94A60EA2683E7A52725CD37D /* DevNotesApp.swift */; };
 		76EC511C1A487046CD2F4C04 /* Exporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE46C25B88AA794F2EC223B5 /* Exporter.swift */; };
-		788E5CA18D581AC7CEB83548 /* MergeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2F0B1922CE23BDBCA098662 /* MergeView.swift */; };
 		7DF3D12B8DBE72288EC31BA1 /* DevNotesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94A60EA2683E7A52725CD37D /* DevNotesApp.swift */; };
-		833A0AEFB5FB57C4E057A819 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07E21273C76AF127D488862A /* SidebarView.swift */; };
-		85B6F984882359286FD82A9A /* EditorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9415E031840711DCEE435B1 /* EditorViewModel.swift */; };
-		8A222B84F45E225DD7A0DE6A /* DevNotesCore in Frameworks */ = {isa = PBXBuildFile; productRef = FABF46E61627D572FF82ED42 /* DevNotesCore */; };
-		99FA9E861307B107691B552D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1A860FB05EAB52091F7E732 /* Assets.xcassets */; };
-		9B56BBBE15E94598DA1E36D3 /* SearchBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C40DA45CA4C483357AA0A0 /* SearchBarView.swift */; };
-		9D8D8A55A4BDD13848975E99 /* DevNotesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94A60EA2683E7A52725CD37D /* DevNotesApp.swift */; };
+		957B4D7FD1A76BAA4E3C0FC1 /* CloudKitSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05BDA9F5F7B3A8E23672923 /* CloudKitSyncService.swift */; };
+		9B0349E5A97ABE1D06065530 /* SearchBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C40DA45CA4C483357AA0A0 /* SearchBarView.swift */; };
 		A2591EC31933C83B75CEBA33 /* EditorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9415E031840711DCEE435B1 /* EditorViewModel.swift */; };
+		A50F24B8372844599BFBF6CC /* EditorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9415E031840711DCEE435B1 /* EditorViewModel.swift */; };
 		A6176ECE962FBBE348D28965 /* StyleApplier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 266C558014E2ED98542A0B55 /* StyleApplier.swift */; };
+		AC0EDF7A2AB5B0ACAE60DB1D /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07E21273C76AF127D488862A /* SidebarView.swift */; };
+		ADF79F5C4EE780C0FBE1F50E /* AppCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54443370DFE141913BD80CE1 /* AppCommands.swift */; };
 		B185B25417465230ADD162E9 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78AFA6F523DB880932AA9022 /* SettingsView.swift */; };
-		BA9B07A8C405021064AE9042 /* Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45CBA42A05533BE57D164B37 /* Platform.swift */; };
-		CF612C70FA3AE12C4B505E2D /* EditorPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = E34663D339352B81822546F8 /* EditorPane.swift */; };
-		D0FA27EF5B77F1DA00EC29EB /* EditorToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03974BA7354B2EECDAEE9388 /* EditorToolbar.swift */; };
+		CCD13E57E86E751EA519B6AE /* DevNotesCore in Frameworks */ = {isa = PBXBuildFile; productRef = 65B852DFA661A75457C78948 /* DevNotesCore */; };
 		D572009A6469620A88BCBF45 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EECFD32311AD536926457D89 /* AppModel.swift */; };
 		D666C440E8E5E8F56CC1EB3E /* EditorToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03974BA7354B2EECDAEE9388 /* EditorToolbar.swift */; };
 		D91F2D71EFEBC1C7D52D5B25 /* AppCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54443370DFE141913BD80CE1 /* AppCommands.swift */; };
 		DD4106FA063CC7FE9AC3EAB1 /* Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45CBA42A05533BE57D164B37 /* Platform.swift */; };
-		E225C73D6F077E07C8EF5FAB /* CloudKitSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05BDA9F5F7B3A8E23672923 /* CloudKitSyncService.swift */; };
-		E9221BD60AC8CAA6697CF271 /* MarkdownTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71566D09682A6781E0210572 /* MarkdownTextView.swift */; };
+		DFD1233F91122C755E3284E4 /* MergeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2F0B1922CE23BDBCA098662 /* MergeView.swift */; };
+		E50BC13A7454538FC54AE001 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EECFD32311AD536926457D89 /* AppModel.swift */; };
+		EE6CF05EFF07C0A845033E2E /* Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45CBA42A05533BE57D164B37 /* Platform.swift */; };
 		F5E6014573EBEF9773993E12 /* SearchBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C40DA45CA4C483357AA0A0 /* SearchBarView.swift */; };
 		FF9CDA04A2BB550817D46576 /* MarkdownTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71566D09682A6781E0210572 /* MarkdownTextView.swift */; };
 /* End PBXBuildFile section */
@@ -58,10 +58,10 @@
 		78AFA6F523DB880932AA9022 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		94A60EA2683E7A52725CD37D /* DevNotesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevNotesApp.swift; sourceTree = "<group>"; };
 		966D8EE4084AE8B2A77F02E7 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		994BF6A1718A5BD6406A8404 /* DevNotes-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "DevNotes-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1A860FB05EAB52091F7E732 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A24629D5B796D7A3F7C5DCC1 /* FileNoteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileNoteStore.swift; sourceTree = "<group>"; };
 		A2C4BCB6CEA650E8A0BA6C28 /* DevNotes */ = {isa = PBXFileReference; lastKnownFileType = folder; name = DevNotes; path = .; sourceTree = SOURCE_ROOT; };
-		A415DAF6E5657AACADD17E31 /* DevNotes iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "DevNotes iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C2F0B1922CE23BDBCA098662 /* MergeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeView.swift; sourceTree = "<group>"; };
 		D05BDA9F5F7B3A8E23672923 /* CloudKitSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncService.swift; sourceTree = "<group>"; };
 		D9415E031840711DCEE435B1 /* EditorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorViewModel.swift; sourceTree = "<group>"; };
@@ -72,11 +72,11 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		86945BE7C707B04D518A3634 /* Frameworks */ = {
+		91D8876CFFBE8C720D3B2747 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8A222B84F45E225DD7A0DE6A /* DevNotesCore in Frameworks */,
+				CCD13E57E86E751EA519B6AE /* DevNotesCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -110,7 +110,7 @@
 		4B481E76F12AD3091A98EFE8 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A415DAF6E5657AACADD17E31 /* DevNotes iOS.app */,
+				994BF6A1718A5BD6406A8404 /* DevNotes-iOS.app */,
 				2C9CD00750279F380D3F8A1B /* DevNotes.app */,
 			);
 			name = Products;
@@ -209,26 +209,6 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		070B6568B0CC4AAD51C50967 /* DevNotes iOS */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 758278C96BC20285DD88602A /* Build configuration list for PBXNativeTarget "DevNotes iOS" */;
-			buildPhases = (
-				A2A117690DCF7B986E69B985 /* Sources */,
-				1786545B5E69E3508D9F41D7 /* Resources */,
-				86945BE7C707B04D518A3634 /* Frameworks */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = "DevNotes iOS";
-			packageProductDependencies = (
-				FABF46E61627D572FF82ED42 /* DevNotesCore */,
-			);
-			productName = "DevNotes iOS";
-			productReference = A415DAF6E5657AACADD17E31 /* DevNotes iOS.app */;
-			productType = "com.apple.product-type.application";
-		};
 		33A3E4E71A224447D435297F /* DevNotes */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = FFE17D6B5DE32F70AB153240 /* Build configuration list for PBXNativeTarget "DevNotes" */;
@@ -249,6 +229,26 @@
 			productReference = 2C9CD00750279F380D3F8A1B /* DevNotes.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A92E5E2CD18A403154D248C2 /* DevNotes-iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DF3B3C32289FE9DBAB8B61AA /* Build configuration list for PBXNativeTarget "DevNotes-iOS" */;
+			buildPhases = (
+				E36733B96A8793E77487D3C8 /* Sources */,
+				8FC5C7F66DC996AC0B919DCB /* Resources */,
+				91D8876CFFBE8C720D3B2747 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "DevNotes-iOS";
+			packageProductDependencies = (
+				65B852DFA661A75457C78948 /* DevNotesCore */,
+			);
+			productName = "DevNotes-iOS";
+			productReference = 994BF6A1718A5BD6406A8404 /* DevNotes-iOS.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -258,11 +258,11 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
-					070B6568B0CC4AAD51C50967 = {
+					33A3E4E71A224447D435297F = {
 						DevelopmentTeam = PWGXN26URQ;
 						ProvisioningStyle = Automatic;
 					};
-					33A3E4E71A224447D435297F = {
+					A92E5E2CD18A403154D248C2 = {
 						DevelopmentTeam = PWGXN26URQ;
 						ProvisioningStyle = Automatic;
 					};
@@ -286,25 +286,25 @@
 			projectRoot = "";
 			targets = (
 				33A3E4E71A224447D435297F /* DevNotes */,
-				070B6568B0CC4AAD51C50967 /* DevNotes iOS */,
+				A92E5E2CD18A403154D248C2 /* DevNotes-iOS */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		1786545B5E69E3508D9F41D7 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				99FA9E861307B107691B552D /* Assets.xcassets in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		262394BB431F0C4D74813556 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				0D7A5F0D39AA6A259897CAC3 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8FC5C7F66DC996AC0B919DCB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				54B34B0EB085B6FBD9E0D1E9 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -335,27 +335,27 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		A2A117690DCF7B986E69B985 /* Sources */ = {
+		E36733B96A8793E77487D3C8 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				53E72C793A2443193DAC618E /* AppCommands.swift in Sources */,
-				5E4E1F175803EB4E9A3E0797 /* AppModel.swift in Sources */,
-				E225C73D6F077E07C8EF5FAB /* CloudKitSyncService.swift in Sources */,
-				486FE6D99AFA7771C2CF34DE /* ContentView.swift in Sources */,
-				9D8D8A55A4BDD13848975E99 /* DevNotesApp.swift in Sources */,
-				CF612C70FA3AE12C4B505E2D /* EditorPane.swift in Sources */,
-				D0FA27EF5B77F1DA00EC29EB /* EditorToolbar.swift in Sources */,
-				85B6F984882359286FD82A9A /* EditorViewModel.swift in Sources */,
-				3A3B2DD06483ACC553778118 /* Exporter.swift in Sources */,
-				3950067C77C9132D8C5BCF86 /* FileNoteStore.swift in Sources */,
-				E9221BD60AC8CAA6697CF271 /* MarkdownTextView.swift in Sources */,
-				788E5CA18D581AC7CEB83548 /* MergeView.swift in Sources */,
-				BA9B07A8C405021064AE9042 /* Platform.swift in Sources */,
-				9B56BBBE15E94598DA1E36D3 /* SearchBarView.swift in Sources */,
-				485CFF9F131BF607E0AF07EC /* SettingsView.swift in Sources */,
-				833A0AEFB5FB57C4E057A819 /* SidebarView.swift in Sources */,
-				0B36FF2D2A21B627B142B544 /* StyleApplier.swift in Sources */,
+				ADF79F5C4EE780C0FBE1F50E /* AppCommands.swift in Sources */,
+				E50BC13A7454538FC54AE001 /* AppModel.swift in Sources */,
+				957B4D7FD1A76BAA4E3C0FC1 /* CloudKitSyncService.swift in Sources */,
+				24A8DD2CBDE0E51E9540D0FD /* ContentView.swift in Sources */,
+				5BA5DF0D50244B5E12621C5E /* DevNotesApp.swift in Sources */,
+				44E61C1935A81DAD293CF26D /* EditorPane.swift in Sources */,
+				4F7FA118EA4D5D74BF8A1A51 /* EditorToolbar.swift in Sources */,
+				A50F24B8372844599BFBF6CC /* EditorViewModel.swift in Sources */,
+				3A4D4B516AE77E8EB92786C7 /* Exporter.swift in Sources */,
+				49283FCC05EBB80EEFA1E97C /* FileNoteStore.swift in Sources */,
+				009A70C087CFC5D44DEC4A6C /* MarkdownTextView.swift in Sources */,
+				DFD1233F91122C755E3284E4 /* MergeView.swift in Sources */,
+				EE6CF05EFF07C0A845033E2E /* Platform.swift in Sources */,
+				9B0349E5A97ABE1D06065530 /* SearchBarView.swift in Sources */,
+				35D096337F96DB28B3CA0944 /* SettingsView.swift in Sources */,
+				AC0EDF7A2AB5B0ACAE60DB1D /* SidebarView.swift in Sources */,
+				3999A5AF8F3EA37B02A52A32 /* StyleApplier.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -445,6 +445,31 @@
 			};
 			name = Release;
 		};
+		3F5CDD6190186C2ACE1A9E3C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = "DevNotes-iOS.entitlements";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = DevNotes;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Josh Glazer";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.jsglazer.DevNotes;
+				PRODUCT_NAME = DevNotes;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		52C3FEF87ECC4D6951C8190B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -466,6 +491,31 @@
 				PRODUCT_NAME = DevNotes;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		664D4BEB3ADF6D1D248554F4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = "DevNotes-iOS.entitlements";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = DevNotes;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Josh Glazer";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.jsglazer.DevNotes;
+				PRODUCT_NAME = DevNotes;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
@@ -535,73 +585,23 @@
 			};
 			name = Debug;
 		};
-		D3FADDFEDFF49AD2AC158254 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = "DevNotes-iOS.entitlements";
-				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = DevNotes;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Josh Glazer";
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.jsglazer.DevNotes;
-				PRODUCT_NAME = DevNotes;
-				SDKROOT = iphoneos;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		EEC35AE4D2DF5411448643D1 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = "DevNotes-iOS.entitlements";
-				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = DevNotes;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Josh Glazer";
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.jsglazer.DevNotes;
-				PRODUCT_NAME = DevNotes;
-				SDKROOT = iphoneos;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		758278C96BC20285DD88602A /* Build configuration list for PBXNativeTarget "DevNotes iOS" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				D3FADDFEDFF49AD2AC158254 /* Debug */,
-				EEC35AE4D2DF5411448643D1 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
-		};
 		C5745410C1890D3871DF66F8 /* Build configuration list for PBXProject "DevNotes" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A9E3E490446BCDC2C4F8F9D1 /* Debug */,
 				21FC6987B075FEBBFFF58C8C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		DF3B3C32289FE9DBAB8B61AA /* Build configuration list for PBXNativeTarget "DevNotes-iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				664D4BEB3ADF6D1D248554F4 /* Debug */,
+				3F5CDD6190186C2ACE1A9E3C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
@@ -625,11 +625,11 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		9797B87FF1EB21760926BBF1 /* DevNotesCore */ = {
+		65B852DFA661A75457C78948 /* DevNotesCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = DevNotesCore;
 		};
-		FABF46E61627D572FF82ED42 /* DevNotesCore */ = {
+		9797B87FF1EB21760926BBF1 /* DevNotesCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = DevNotesCore;
 		};
