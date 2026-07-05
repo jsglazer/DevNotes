@@ -21,7 +21,8 @@ DevNotes is an ultra-fast, lightweight, offline-first Markdown editor for macOS 
 - **iPhone-Ready Editing:** A bold note-title bar above the toolbar, a dedicated key to dismiss the keyboard, and note-list/outline/settings sheets tuned for a phone-sized layout.
 - **iCloud CloudKit Sync:** Automatic background synchronization with offline storage support (degrades gracefully to local storage if iCloud is unavailable).
 - **Live External-Change Detection:** DevNotes watches its notes folder, so edits arriving from iCloud or another device refresh the list — and reload the open note when you have no unsaved edits — without you having to switch notes first.
-- **Visual Conflict Merge:** Resolve sync conflicts using a side-by-side view on macOS and an inline view on iOS.
+- **Visual Conflict Merge:** Resolve sync conflicts using a side-by-side view on macOS and an inline view on iOS. Choosing a side clears the underlying file-version conflict on disk, so it can't resurface after a relaunch.
+- **Version Indicator:** The current app version is shown in small text at the top-right of the main screen on both macOS and iOS.
 - **Sanitized Custom CSS Styling:** Apply custom formatting to the editor text area via a safe, parsed set of CSS-like properties applied to the native TextKit 2 renderer.
 
 ## Architecture
