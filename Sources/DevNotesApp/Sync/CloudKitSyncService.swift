@@ -13,6 +13,7 @@ import Foundation
 public actor CloudKitSyncService: SyncService {
     private let containerIdentifier: String?
     private let conflictProvider: @Sendable () async -> [ConflictRecord]
+    private let conflictResolver: @Sendable (NoteID) async -> Void
 
     private var currentStatus: SyncStatus = .idle
     private var queue = ConflictQueue()
@@ -28,12 +29,17 @@ public actor CloudKitSyncService: SyncService {
 
     /// - Parameter conflictProvider: supplies captured conflicts (e.g. `FileNoteStore.captureConflict`
     ///   over the notes iCloud flagged). Injected so this service never reaches into storage itself.
+    /// - Parameter conflictResolver: clears the underlying on-disk conflict marker (e.g.
+    ///   `FileNoteStore.resolveFileVersionConflict`) once the user resolves it, so `conflictProvider`
+    ///   stops resurfacing it.
     public init(
         containerIdentifier: String? = nil,
-        conflictProvider: @escaping @Sendable () async -> [ConflictRecord] = { [] }
+        conflictProvider: @escaping @Sendable () async -> [ConflictRecord] = { [] },
+        conflictResolver: @escaping @Sendable (NoteID) async -> Void = { _ in }
     ) {
         self.containerIdentifier = containerIdentifier
         self.conflictProvider = conflictProvider
+        self.conflictResolver = conflictResolver
     }
 
     public func status() async -> SyncStatus { currentStatus }
@@ -63,6 +69,7 @@ public actor CloudKitSyncService: SyncService {
         guard queue.resolve(id) else { throw RepositoryError.notFound(id) }
         // The merged body is written back through the file store (source of truth); CloudKit
         // then syncs the resolved file on its next pass.
+        await conflictResolver(id)
     }
 
     private func refreshConflicts() async {

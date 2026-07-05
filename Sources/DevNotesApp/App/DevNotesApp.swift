@@ -11,16 +11,19 @@ struct DevNotesApp: App {
 
     init() {
         let store = FileNoteStore.makeDefault()
-        let sync = CloudKitSyncService(conflictProvider: { [store] in
-            let summaries = (try? await store.summaries()) ?? []
-            var captured: [ConflictRecord] = []
-            for summary in summaries {
-                if let conflict = await store.captureConflict(for: summary.id) {
-                    captured.append(conflict)
+        let sync = CloudKitSyncService(
+            conflictProvider: { [store] in
+                let summaries = (try? await store.summaries()) ?? []
+                var captured: [ConflictRecord] = []
+                for summary in summaries {
+                    if let conflict = await store.captureConflict(for: summary.id) {
+                        captured.append(conflict)
+                    }
                 }
-            }
-            return captured
-        })
+                return captured
+            },
+            conflictResolver: { [store] id in await store.resolveFileVersionConflict(for: id) }
+        )
         _model = State(initialValue: AppModel(repository: store, sync: sync, watchDirectory: store.directory))
     }
 

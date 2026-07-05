@@ -22,3 +22,11 @@ enum Platform {
         #endif
     }
 }
+
+/// The marketing version (`CFBundleShortVersionString`), shown in small text on the main screen.
+enum AppVersion {
+    static var display: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+        return "v\(version)"
+    }
+}

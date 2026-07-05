@@ -39,6 +39,11 @@ struct ContentView: View {
                 }
                 // ⌘B is owned by the View-menu command so the shortcut isn't double-bound.
             }
+            ToolbarItem(placement: .primaryAction) {
+                Text(AppVersion.display)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
         .task {
             await model.bootstrap()
@@ -58,14 +63,19 @@ struct ContentView: View {
         EditorPane(model: model)
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
-                    if model.selectedID != nil {
-                        Text(model.activeTitle.isEmpty ? "Untitled" : model.activeTitle)
-                            .font(.headline.bold())
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 16)
-                            .padding(.top, 8)
+                    HStack {
+                        if model.selectedID != nil {
+                            Text(model.activeTitle.isEmpty ? "Untitled" : model.activeTitle)
+                                .font(.headline.bold())
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Text(AppVersion.display)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
                     IOSTopBar(
                         editor: model.editor,
                         onShowNotes: { isNotesListPresented = true },

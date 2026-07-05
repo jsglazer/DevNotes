@@ -120,4 +120,16 @@ public actor FileNoteStore: NoteRepository {
         )
         return ConflictRecord(id: id, base: nil, mine: mine, theirs: theirs)
     }
+
+    /// Marks the on-disk file-version conflict for `id` as resolved once the user has picked a
+    /// side. Without this, `NSFileVersion.unresolvedConflictVersionsOfItem` keeps reporting the
+    /// same conflict on every subsequent `captureConflict` call — including after a relaunch —
+    /// so the merge sheet would resurface indefinitely.
+    public func resolveFileVersionConflict(for id: NoteID) {
+        let fileURL = url(for: id)
+        if let versions = NSFileVersion.unresolvedConflictVersionsOfItem(at: fileURL) {
+            for version in versions { version.isResolved = true }
+        }
+        try? NSFileVersion.removeOtherVersionsOfItem(at: fileURL)
+    }
 }
