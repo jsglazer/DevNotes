@@ -12,6 +12,10 @@ struct MarkdownTextView: View {
     var style: StyleSheet
     var wrapText: Bool = true
     var showLineNumbers: Bool = false
+    var spellCheck: Bool = true
+    /// Resolves a pressed key chord to a keymap action; returns true when handled so the editor
+    /// consumes the event. Provided by the shell (macOS only); iOS ignores it.
+    var onKeyChord: (@MainActor (DevNotesCore.KeyChord) -> Bool)?
 
     var body: some View {
         MarkdownTextViewRepresentable(
@@ -19,7 +23,9 @@ struct MarkdownTextView: View {
             selection: $selection,
             style: style,
             wrapText: wrapText,
-            showLineNumbers: showLineNumbers
+            showLineNumbers: showLineNumbers,
+            spellCheck: spellCheck,
+            onKeyChord: onKeyChord
         )
     }
 }
@@ -33,18 +39,28 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
     var style: StyleSheet
     var wrapText: Bool
     var showLineNumbers: Bool
+    var spellCheck: Bool
+    var onKeyChord: (@MainActor (DevNotesCore.KeyChord) -> Bool)?
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> NSScrollView {
-        // `usingTextLayoutManager: true` selects the TextKit 2 stack.
-        let textView = NSTextView(usingTextLayoutManager: true)
+        // `usingTextLayoutManager: true` selects the TextKit 2 stack. `EditorTextView` overrides
+        // `keyDown` so the user's keymap (indent/outdent/select-to-edge) is honoured before the
+        // field editor's default handling.
+        let textView = EditorTextView(usingTextLayoutManager: true)
+        textView.onKeyChord = onKeyChord
         textView.delegate = context.coordinator
         textView.isRichText = false
         textView.allowsUndo = true
         textView.autoresizingMask = [.width]
         textView.textContainerInset = NSSize(width: 8, height: 8)
         textView.isVerticallyResizable = true
+        // Basic spell checking only: continuous red-squiggle checking, but never grammar checks or
+        // automatic text/spelling substitutions (those rewrite code and identifiers unbidden).
+        textView.isAutomaticSpellingCorrectionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.isGrammarCheckingEnabled = false
         context.coordinator.textView = textView
 
         let scrollView = NSScrollView()
@@ -66,13 +82,24 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let textView = scrollView.documentView as? NSTextView else { return }
+        guard let textView = scrollView.documentView as? EditorTextView else { return }
         context.coordinator.parent = self
+        textView.onKeyChord = onKeyChord
 
         if textView.string != text {
             textView.string = text
+            // Resetting the string wipes attribute runs — re-colour is mandatory.
+            context.coordinator.invalidateHighlight()
         }
         applyWrapping(to: textView, in: scrollView)
+
+        if textView.isContinuousSpellCheckingEnabled != spellCheck {
+            textView.isContinuousSpellCheckingEnabled = spellCheck
+        }
+        // Toggling the gutter must never change the note's font colour.
+        if context.coordinator.showLineNumbersChanged(showLineNumbers) {
+            context.coordinator.invalidateHighlight()
+        }
 
         textView.typingAttributes = StyleApplier().bodyAttributes(from: style)
         // Re-highlight only when the text or style actually changed. The delegate callbacks
@@ -88,6 +115,9 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         let desired = NSRange(location: selection.location, length: selection.length)
         if textView.selectedRange() != desired, NSMaxRange(desired) <= fullRange.length {
             textView.setSelectedRange(desired)
+            // Keep the caret on-screen after a command-driven selection change (move line,
+            // select-to-edge, open-at-last-line) — the view no longer scrolls it off the bottom.
+            textView.scrollRangeToVisible(desired)
         }
 
         scrollView.rulersVisible = showLineNumbers
@@ -125,6 +155,8 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         /// re-highlighting content the delegate callbacks already styled.
         private var highlightedText: String?
         private var highlightedStyle: StyleSheet?
+        /// Last-seen gutter state, so a line-number toggle can force a re-colour.
+        private var lastShowLineNumbers: Bool?
 
         func needsHighlight(text: String, style: StyleSheet) -> Bool {
             highlightedText != text || highlightedStyle != style
@@ -133,6 +165,20 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         func didHighlight(text: String, style: StyleSheet) {
             highlightedText = text
             highlightedStyle = style
+        }
+
+        /// Drops the highlight cache so the next update pass re-colours the whole note. Called
+        /// whenever the storage is reset (`textView.string = …`), which wipes attribute runs: the
+        /// syntax colours must be re-applied or the text falls back to the uniform default colour.
+        func invalidateHighlight() {
+            highlightedText = nil
+        }
+
+        /// True when the gutter visibility changed since the last update (and records the new
+        /// value). Toggling line numbers must not leave the note text in the default colour.
+        func showLineNumbersChanged(_ value: Bool) -> Bool {
+            defer { lastShowLineNumbers = value }
+            return lastShowLineNumbers != value
         }
 
         init(_ parent: MarkdownTextViewRepresentable) { self.parent = parent }
@@ -174,6 +220,7 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
                 MarkdownHighlighter(style: parent.style).apply(to: storage)
                 didHighlight(text: edit.text, style: parent.style)
             }
+            textView.scrollRangeToVisible(textView.selectedRange())
             ruler?.needsDisplay = true
             return true
         }
@@ -187,6 +234,8 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
                 MarkdownHighlighter(style: parent.style).apply(to: storage)
                 didHighlight(text: textView.string, style: parent.style)
             }
+            // Follow the caret as the user types so text added at the bottom isn't clipped.
+            textView.scrollRangeToVisible(range)
             ruler?.needsDisplay = true
         }
 
@@ -273,6 +322,10 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
     var style: StyleSheet
     var wrapText: Bool
     var showLineNumbers: Bool
+    var spellCheck: Bool
+    /// Accepted for signature parity with macOS; iOS uses hardware-keyboard commands elsewhere and
+    /// does not route key events through the keymap here.
+    var onKeyChord: (@MainActor (DevNotesCore.KeyChord) -> Bool)?
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -281,6 +334,7 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         let textView = UITextView()
         textView.delegate = context.coordinator
         textView.autocorrectionType = .no
+        textView.spellCheckingType = spellCheck ? .yes : .no
         textView.textContainerInset = UIEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
         textView.backgroundColor = .clear
         let container = EditorContainerView(textView: textView)
@@ -291,8 +345,18 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
     func updateUIView(_ container: EditorContainerView, context: Context) {
         context.coordinator.parent = self
         let textView = container.textView
+        let desiredSpellCheck: UITextSpellCheckingType = spellCheck ? .yes : .no
+        if textView.spellCheckingType != desiredSpellCheck {
+            textView.spellCheckingType = desiredSpellCheck
+        }
         if textView.text != text {
             textView.text = text
+            // Resetting the string wipes attribute runs — re-colour is mandatory.
+            context.coordinator.invalidateHighlight()
+        }
+        // Toggling the gutter must never change the note's font colour.
+        if context.coordinator.showLineNumbersChanged(showLineNumbers) {
+            context.coordinator.invalidateHighlight()
         }
         textView.typingAttributes = StyleApplier().bodyAttributes(from: style)
         // Skip the syntax pass when the delegate callbacks already highlighted this exact
@@ -322,6 +386,8 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         /// re-highlighting content the delegate callbacks already styled.
         private var highlightedText: String?
         private var highlightedStyle: StyleSheet?
+        /// Last-seen gutter state, so a line-number toggle can force a re-colour.
+        private var lastShowLineNumbers: Bool?
 
         func needsHighlight(text: String, style: StyleSheet) -> Bool {
             highlightedText != text || highlightedStyle != style
@@ -330,6 +396,20 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         func didHighlight(text: String, style: StyleSheet) {
             highlightedText = text
             highlightedStyle = style
+        }
+
+        /// Drops the highlight cache so the next update pass re-colours the whole note. Called
+        /// whenever the storage is reset (`textView.string = …`), which wipes attribute runs: the
+        /// syntax colours must be re-applied or the text falls back to the uniform default colour.
+        func invalidateHighlight() {
+            highlightedText = nil
+        }
+
+        /// True when the gutter visibility changed since the last update (and records the new
+        /// value). Toggling line numbers must not leave the note text in the default colour.
+        func showLineNumbersChanged(_ value: Bool) -> Bool {
+            defer { lastShowLineNumbers = value }
+            return lastShowLineNumbers != value
         }
 
         init(_ parent: MarkdownTextViewRepresentable) { self.parent = parent }

@@ -19,7 +19,12 @@ struct EditorPane: View {
                     selection: Binding(get: { model.editor.selection }, set: { model.editor.selection = $0 }),
                     style: model.styleSheet,
                     wrapText: model.wrapText,
-                    showLineNumbers: model.showLineNumbers
+                    showLineNumbers: model.showLineNumbers,
+                    spellCheck: model.spellCheck,
+                    onKeyChord: { chord in
+                        guard let action = model.keymap.action(for: chord) else { return false }
+                        return model.perform(action)
+                    }
                 )
             }
         }

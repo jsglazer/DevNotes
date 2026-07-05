@@ -30,6 +30,7 @@ struct SettingsView: View {
             Section("Editor") {
                 Toggle("Wrap text", isOn: $model.wrapText)
                 Toggle("Show line numbers", isOn: $model.showLineNumbers)
+                Toggle("Check spelling while typing", isOn: $model.spellCheck)
             }
 
             Section("On Open") {
@@ -41,6 +42,35 @@ struct SettingsView: View {
                 Text("Where the caret lands when you open a note.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section("Keyboard Shortcuts") {
+                Text(
+                    "Every bindable function and its current shortcut. Edit them in "
+                        + "`~/.config/devnotes/keymap.json` (created on first launch); changes take effect "
+                        + "next launch."
+                )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                ForEach(KeymapAction.allCases, id: \.self) { action in
+                    HStack {
+                        Text(action.title)
+                        Spacer()
+                        Text(model.keymap.chord(for: action)?.displaySymbols ?? "—")
+                            .font(.body.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if model.keymapWarnings.isEmpty == false {
+                    ForEach(Array(model.keymapWarnings.enumerated()), id: \.offset) { _, warning in
+                        Label(warning, systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
             }
 
             Section("Editor Style") {

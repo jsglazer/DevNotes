@@ -31,6 +31,7 @@ private enum PreferenceKey {
     static let openJump = "devnotes.openJump"
     static let wrapText = "devnotes.wrapText"
     static let showLineNumbers = "devnotes.showLineNumbers"
+    static let spellCheck = "devnotes.spellCheck"
     static let pinned = "devnotes.pinnedIDs"
 }
 
@@ -71,6 +72,18 @@ public final class AppModel {
     public var wrapText = true { didSet { defaults.set(wrapText, forKey: PreferenceKey.wrapText) } }
     public var showLineNumbers = false { didSet { defaults.set(showLineNumbers, forKey: PreferenceKey.showLineNumbers) } }
 
+    /// Continuous spell checking (red squiggles) in the editor. Defaults ON; toggled from the View
+    /// menu and Settings. A basic checker only — no autocorrect/substitutions are enabled.
+    public var spellCheck = true { didSet { defaults.set(spellCheck, forKey: PreferenceKey.spellCheck) } }
+
+    /// User-configurable keyboard shortcuts, loaded once at launch from `~/.config/devnotes/keymap.json`
+    /// (seeded with the defaults on first run). The View menu, editor key handling, and the Settings
+    /// shortcut list all read from this single table.
+    public private(set) var keymap: Keymap = .defaults
+    /// Non-fatal problems found while loading the keymap file (unknown actions, bad/duplicate
+    /// chords), surfaced read-only in Settings.
+    public private(set) var keymapWarnings: [String] = []
+
     /// Sidebar collapse state, owned here so both the ⌘B toolbar button and the View menu drive
     /// the same source of truth.
     public var columnVisibility: NavigationSplitViewVisibility = .all
@@ -96,6 +109,7 @@ public final class AppModel {
         self.watchDirectory = watchDirectory
         self.watchUbiquity = watchUbiquity
         loadPreferences()
+        (keymap, keymapWarnings) = KeymapStore.load()
         editor.setOnChange { [weak self] _ in
             self?.hasUnsavedEdits = true
             self?.scheduleSave()
@@ -122,6 +136,10 @@ public final class AppModel {
             wrapText = defaults.bool(forKey: PreferenceKey.wrapText)
         }
         showLineNumbers = defaults.bool(forKey: PreferenceKey.showLineNumbers)
+        // Spell check defaults ON, so only override when the user has explicitly stored a value.
+        if defaults.object(forKey: PreferenceKey.spellCheck) != nil {
+            spellCheck = defaults.bool(forKey: PreferenceKey.spellCheck)
+        }
         pinnedIDs = Set(defaults.stringArray(forKey: PreferenceKey.pinned) ?? [])
     }
 
@@ -249,6 +267,40 @@ public final class AppModel {
         }
         guard index < list.count - 1 else { return }
         await select(list[index + 1].id)
+    }
+
+    /// Extends the selection from the document start to the current caret/anchor (Shift-⌘-↑).
+    public func selectToTop() {
+        editor.selection = DevNotesCore.TextSelection(location: 0, length: editor.selection.end)
+    }
+
+    /// Extends the selection from the current caret/anchor to the document end (Shift-⌘-↓).
+    public func selectToBottom() {
+        let length = (editor.text as NSString).length
+        let start = editor.selection.location
+        editor.selection = DevNotesCore.TextSelection(location: start, length: max(0, length - start))
+    }
+
+    // MARK: - Keymap dispatch
+
+    /// Runs a keymap action, returning true when it was handled (so the caller can consume the key
+    /// event). Editor-local actions route through the pure `OutlineEngine` via `editor`; navigation
+    /// and view toggles mutate app state. Called on the main actor from the editor's key handling.
+    @discardableResult
+    public func perform(_ action: KeymapAction) -> Bool {
+        switch action {
+        case .indent: editor.run(.indent)
+        case .unindent: editor.run(.outdent)
+        case .moveLineUp: editor.run(.moveLineUp)
+        case .moveLineDown: editor.run(.moveLineDown)
+        case .selectToTop: selectToTop()
+        case .selectToBottom: selectToBottom()
+        case .wrapText: wrapText.toggle()
+        case .showLineNumbers: showLineNumbers.toggle()
+        case .nextNote: Task { await selectNext() }
+        case .previousNote: Task { await selectPrevious() }
+        }
+        return true
     }
 
     public func newNote() async {
