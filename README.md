@@ -11,11 +11,16 @@ DevNotes is an ultra-fast, lightweight, offline-first Markdown editor for macOS 
 - **Collapsible Sidebar:** Toggle the list of notes sorted by modification date using `Cmd-B` (also under the **View** menu).
 - **Opens Where You Left Off:** On launch DevNotes selects the note at the top of the list and places the caret at the **first** or **last** line — your choice in Settings.
 - **Sidebar Context Menu:** Right-click any note to **Pin to Top** (pinned notes float above the date-sorted list) or **Delete** it. Deletes move the file to the system **Trash**, so they're recoverable.
-- **View Menu Controls:** Toggle **Wrap Text** and a **line-number gutter**, and switch between **System / Light / Dark** themes.
+- **Live Markdown Syntax Coloring:** Markdown markers are colored in place as you type — heading `#`s in deep red (`#780202`), list markers in blue, inline `` `code` `` in teal monospace, **bold**/*italic* delimiters highlighted, plus blockquotes and links — layered over your custom editor style without any WebView.
+- **Line Numbers Everywhere:** A **line-number gutter** on both macOS and iOS. Toggle it (and **Wrap Text**) from the **View** menu on macOS or from **Settings** on iOS.
+- **Auto-Continuing Lists:** Press **Return** in a bullet or numbered item and the next line continues the list automatically; pressing Return on an empty item exits the list.
+- **View Menu Controls:** Toggle **Wrap Text** and the **line-number gutter**, and switch between **System / Light / Dark** themes.
 - **Export & Print:** From the **File** menu, export the open note as **Markdown** or **plain text**, or **Save as PDF** (rendered with your editor styling).
 - **Regex Search:** Advanced search supporting regular expressions, whole-word filtering, and case-sensitivity.
 - **Outline Editing Tools:** Built-in actions to toggle bullets and numbered lists (with continuous auto-formatting), indent and outdent lines, increment/decrement headings, and move lines up or down.
+- **iPhone-Ready Editing:** A bold note-title bar above the toolbar, a dedicated key to dismiss the keyboard, and note-list/outline/settings sheets tuned for a phone-sized layout.
 - **iCloud CloudKit Sync:** Automatic background synchronization with offline storage support (degrades gracefully to local storage if iCloud is unavailable).
+- **Live External-Change Detection:** DevNotes watches its notes folder, so edits arriving from iCloud or another device refresh the list — and reload the open note when you have no unsaved edits — without you having to switch notes first.
 - **Visual Conflict Merge:** Resolve sync conflicts using a side-by-side view on macOS and an inline view on iOS.
 - **Sanitized Custom CSS Styling:** Apply custom formatting to the editor text area via a safe, parsed set of CSS-like properties applied to the native TextKit 2 renderer.
 
@@ -32,7 +37,7 @@ DevNotes is an ultra-fast, lightweight, offline-first Markdown editor for macOS 
 
 2. **`DevNotesApp`:** The SwiftUI shell targets macOS and iOS, linking `DevNotesCore` and implementing native platform controls.
    - **`App` & `Storage`:** Implements `AppModel` and `FileNoteStore` for file-system storage under the iCloud ubiquity folder, wrapping `NSFileVersion` for conflict detection.
-   - **`Editor`:** Builds a native TextKit 2 `NSTextView` / `UITextView` wrapper, avoiding WebViews for extreme efficiency.
+   - **`Editor`:** Builds a native TextKit 2 `NSTextView` / `UITextView` wrapper, avoiding WebViews for extreme efficiency, with a `MarkdownHighlighter` that colors syntax in place and Return routed through the pure outline engine for list continuation.
    - **`Sync`:** Encapsulates `CloudKitSyncService`, isolating CloudKit dependencies to a single file.
 
 ## Where Your Notes Live (iCloud Sync)
