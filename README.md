@@ -11,7 +11,7 @@ DevNotes is an ultra-fast, lightweight, offline-first Markdown editor for macOS 
 - **Collapsible Sidebar:** Toggle the list of notes sorted by modification date using `Cmd-B` (also under the **View** menu).
 - **Opens Where You Left Off:** On launch DevNotes selects the note at the top of the list and places the caret at the **first** or **last** line — your choice in Settings.
 - **Sidebar Context Menu:** Right-click any note to **Pin to Top** (pinned notes float above the date-sorted list) or **Delete** it. Deletes move the file to the system **Trash**, so they're recoverable.
-- **Live Markdown Syntax Coloring:** Markdown markers are colored in place as you type — heading `#`s in deep red (`#780202`), list markers in blue, inline `` `code` `` in teal monospace, **bold**/*italic* delimiters highlighted, plus blockquotes and links — layered over your custom editor style without any WebView.
+- **Live Markdown Syntax Coloring:** Markdown markers are colored in place as you type — heading lines take a color per level, markers and text alike (`#` red `#D8564F`, `##` orange `#E07D2C`, `###` yellow `#DAB22E`, `####`+ green `#89AC40`), list markers in blue, inline `` `code` `` in teal monospace, **bold**/*italic* delimiters highlighted, plus blockquotes and links — layered over your custom editor style without any WebView.
 - **Line Numbers Everywhere:** A **line-number gutter** on both macOS and iOS. Toggle it (and **Wrap Text**) from the **View** menu on macOS or from **Settings** on iOS.
 - **Auto-Continuing Lists:** Press **Return** in a bullet or numbered item and the next line continues the list automatically; pressing Return on an empty item exits the list.
 - **View Menu Controls:** Toggle **Wrap Text** and the **line-number gutter**, and switch between **System / Light / Dark** themes.
@@ -19,7 +19,7 @@ DevNotes is an ultra-fast, lightweight, offline-first Markdown editor for macOS 
 - **Regex Search:** Advanced search supporting regular expressions, whole-word filtering, and case-sensitivity.
 - **Outline Editing Tools:** Built-in actions to toggle bullets and numbered lists (with continuous auto-formatting), indent and outdent lines, increment/decrement headings, and move lines up or down.
 - **iPhone-Ready Editing:** A bold note-title bar above the toolbar, a dedicated key to dismiss the keyboard, and note-list/outline/settings sheets tuned for a phone-sized layout.
-- **iCloud CloudKit Sync:** Automatic background synchronization with offline storage support (degrades gracefully to local storage if iCloud is unavailable).
+- **iCloud CloudKit Sync:** Automatic background synchronization with offline storage support (degrades gracefully to local storage if iCloud is unavailable). A metadata-query monitor spots remote edits the moment iCloud learns about them and starts downloading immediately — no waiting for the system to materialize files on its own — and local edits are saved (and begin uploading) within 400ms of a typing pause.
 - **Live External-Change Detection:** DevNotes watches its notes folder, so edits arriving from iCloud or another device refresh the list — and reload the open note when you have no unsaved edits — without you having to switch notes first.
 - **Visual Conflict Merge:** Resolve sync conflicts using a side-by-side view on macOS and an inline view on iOS. Choosing a side clears the underlying file-version conflict on disk, so it can't resurface after a relaunch.
 - **Version Indicator:** The current app version is shown in small text at the top-right of the main screen on both macOS and iOS.
@@ -39,7 +39,7 @@ DevNotes is an ultra-fast, lightweight, offline-first Markdown editor for macOS 
 2. **`DevNotesApp`:** The SwiftUI shell targets macOS and iOS, linking `DevNotesCore` and implementing native platform controls.
    - **`App` & `Storage`:** Implements `AppModel` and `FileNoteStore` for file-system storage under the iCloud ubiquity folder, wrapping `NSFileVersion` for conflict detection.
    - **`Editor`:** Builds a native TextKit 2 `NSTextView` / `UITextView` wrapper, avoiding WebViews for extreme efficiency, with a `MarkdownHighlighter` that colors syntax in place and Return routed through the pure outline engine for list continuation.
-   - **`Sync`:** Encapsulates `CloudKitSyncService`, isolating CloudKit dependencies to a single file.
+   - **`Sync`:** Encapsulates `CloudKitSyncService` (isolating CloudKit dependencies to a single file) and `UbiquityDownloadMonitor`, an `NSMetadataQuery` watcher that eagerly downloads remote iCloud changes as soon as their metadata arrives.
 
 ## Where Your Notes Live (iCloud Sync)
 
@@ -49,7 +49,7 @@ DevNotes stores each note as a single Markdown (`.md`) file inside its **own app
 ~/Library/Mobile Documents/iCloud~com~jsglazer~DevNotes/Documents/
 ```
 
-iCloud syncs those files between every signed-in device automatically (file-level ubiquitous sync); `CloudKitSyncService` sits on top only for conflict detection and, on device builds, push subscriptions. If iCloud is unavailable the app falls back to `~/Library/Application Support/DevNotes/` and keeps working offline, syncing when the connection returns.
+iCloud syncs those files between every signed-in device automatically (file-level ubiquitous sync); a metadata-query monitor accelerates that by triggering downloads of remote changes as soon as they become visible, and `CloudKitSyncService` sits on top only for conflict detection and, on device builds, push subscriptions. If iCloud is unavailable the app falls back to `~/Library/Application Support/DevNotes/` and keeps working offline, syncing when the connection returns.
 
 **Why don't I see a `DevNotes` folder in iCloud Drive / Finder?** Two reasons, both expected:
 
@@ -161,7 +161,7 @@ DevNotes supports personalizing the text area rendering using a sanitized CSS-li
 | `heading1-size` | Positive numeric values | Font size for Level 1 headings (`#`). | `heading1-size: 24` |
 | `heading2-size` | Positive numeric values | Font size for Level 2 headings (`##`). | `heading2-size: 20` |
 | `heading3-size` | Positive numeric values | Font size for Level 3 headings (`###`). | `heading3-size: 18` |
-| `heading-color` | Hexadecimal color code (`#rgb`, `#rrggbb`, `#rrggbbaa`) | Sets a specific color for all markdown headings. | `heading-color: #3b82f6` |
+| `heading-color` | Hexadecimal color code (`#rgb`, `#rrggbb`, `#rrggbbaa`) | Accepted for compatibility, but currently superseded in the editor by the fixed per-level heading colors (see Features). | `heading-color: #3b82f6` |
 
 ### CSS Example
 
