@@ -24,7 +24,12 @@ struct DevNotesApp: App {
             },
             conflictResolver: { [store] id in await store.resolveFileVersionConflict(for: id) }
         )
-        _model = State(initialValue: AppModel(repository: store, sync: sync, watchDirectory: store.directory))
+        _model = State(initialValue: AppModel(
+            repository: store,
+            sync: sync,
+            watchDirectory: store.directory,
+            watchUbiquity: store.isUbiquitous
+        ))
     }
 
     var body: some Scene {

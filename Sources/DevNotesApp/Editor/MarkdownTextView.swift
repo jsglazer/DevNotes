@@ -75,8 +75,13 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         applyWrapping(to: textView, in: scrollView)
 
         textView.typingAttributes = StyleApplier().bodyAttributes(from: style)
-        if let storage = textView.textStorage {
+        // Re-highlight only when the text or style actually changed. The delegate callbacks
+        // already highlight after each edit, and this update pass runs right behind them — without
+        // this guard every keystroke paid for the full syntax pass twice.
+        if context.coordinator.needsHighlight(text: textView.string, style: style),
+           let storage = textView.textStorage {
             MarkdownHighlighter(style: style).apply(to: storage)
+            context.coordinator.didHighlight(text: textView.string, style: style)
         }
         let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
 
@@ -116,6 +121,20 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         weak var ruler: LineNumberRulerView?
         private let engine = OutlineEngine()
 
+        /// The text/style the highlighter last ran over, so the SwiftUI update pass can skip
+        /// re-highlighting content the delegate callbacks already styled.
+        private var highlightedText: String?
+        private var highlightedStyle: StyleSheet?
+
+        func needsHighlight(text: String, style: StyleSheet) -> Bool {
+            highlightedText != text || highlightedStyle != style
+        }
+
+        func didHighlight(text: String, style: StyleSheet) {
+            highlightedText = text
+            highlightedStyle = style
+        }
+
         init(_ parent: MarkdownTextViewRepresentable) { self.parent = parent }
 
         deinit {
@@ -153,6 +172,7 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             parent.selection = edit.selection
             if let storage = textView.textStorage {
                 MarkdownHighlighter(style: parent.style).apply(to: storage)
+                didHighlight(text: edit.text, style: parent.style)
             }
             ruler?.needsDisplay = true
             return true
@@ -161,9 +181,11 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             parent.text = textView.string
-            parent.selection = DevNotesCore.TextSelection(location: textView.selectedRange().location, length: textView.selectedRange().length)
+            let range = textView.selectedRange()
+            parent.selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
             if let storage = textView.textStorage {
                 MarkdownHighlighter(style: parent.style).apply(to: storage)
+                didHighlight(text: textView.string, style: parent.style)
             }
             ruler?.needsDisplay = true
         }
@@ -273,7 +295,12 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
             textView.text = text
         }
         textView.typingAttributes = StyleApplier().bodyAttributes(from: style)
-        MarkdownHighlighter(style: style).apply(to: textView.textStorage)
+        // Skip the syntax pass when the delegate callbacks already highlighted this exact
+        // text/style — otherwise every keystroke runs the highlighter twice.
+        if context.coordinator.needsHighlight(text: textView.text, style: style) {
+            MarkdownHighlighter(style: style).apply(to: textView.textStorage)
+            context.coordinator.didHighlight(text: textView.text, style: style)
+        }
 
         let length = (textView.text as NSString).length
         let desired = NSRange(location: selection.location, length: selection.length)
@@ -291,6 +318,20 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         weak var container: EditorContainerView?
         private let engine = OutlineEngine()
 
+        /// The text/style the highlighter last ran over, so the SwiftUI update pass can skip
+        /// re-highlighting content the delegate callbacks already styled.
+        private var highlightedText: String?
+        private var highlightedStyle: StyleSheet?
+
+        func needsHighlight(text: String, style: StyleSheet) -> Bool {
+            highlightedText != text || highlightedStyle != style
+        }
+
+        func didHighlight(text: String, style: StyleSheet) {
+            highlightedText = text
+            highlightedStyle = style
+        }
+
         init(_ parent: MarkdownTextViewRepresentable) { self.parent = parent }
 
         /// Intercepts Return to continue (or exit) a list marker via the pure `OutlineEngine`.
@@ -301,6 +342,7 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
             textView.text = edit.text
             textView.typingAttributes = StyleApplier().bodyAttributes(from: parent.style)
             MarkdownHighlighter(style: parent.style).apply(to: textView.textStorage)
+            didHighlight(text: edit.text, style: parent.style)
             textView.selectedRange = NSRange(location: edit.selection.location, length: edit.selection.length)
             parent.text = edit.text
             parent.selection = edit.selection
@@ -311,6 +353,7 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
             MarkdownHighlighter(style: parent.style).apply(to: textView.textStorage)
+            didHighlight(text: textView.text, style: parent.style)
             let range = textView.selectedRange
             parent.selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
             container?.gutter.setNeedsDisplay()

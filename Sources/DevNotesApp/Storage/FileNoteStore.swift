@@ -14,12 +14,23 @@ public actor FileNoteStore: NoteRepository {
     /// as `nonisolated` so the composition root can hand it to a `DirectoryWatcher` without awaiting
     /// the actor; it is an immutable `Sendable` value, so this is safe.
     public nonisolated let directory: URL
+
+    /// True when `directory` lives in the iCloud ubiquity container, so the composition root can
+    /// decide whether ubiquity-specific machinery (metadata-query download triggering) applies.
+    public nonisolated let isUbiquitous: Bool
+
     // Each access resolves the process-wide `FileManager.default` inside the actor's isolation,
     // so no non-Sendable instance ever crosses an isolation boundary.
     private var fileManager: FileManager { .default }
 
-    public init(directory: URL) {
+    /// Summaries already built for files whose modification date hasn't changed since, keyed by
+    /// file name. `summaries()` runs after every debounced save and every directory event, so
+    /// without this every keystroke-pause re-read the full body of *every* note in the folder.
+    private var summaryCache: [String: (modified: Date, summary: NoteSummary)] = [:]
+
+    public init(directory: URL, isUbiquitous: Bool = false) {
         self.directory = directory
+        self.isUbiquitous = isUbiquitous
     }
 
     /// Resolves the iCloud ubiquity container's Documents directory, falling back to a local
@@ -27,18 +38,23 @@ public actor FileNoteStore: NoteRepository {
     public static func makeDefault() -> FileNoteStore {
         let fileManager = FileManager.default
         let directory: URL
+        let isUbiquitous: Bool
         if let ubiquity = fileManager.url(forUbiquityContainerIdentifier: nil) {
             directory = ubiquity.appendingPathComponent("Documents", isDirectory: true)
+            isUbiquitous = true
         } else {
             let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             directory = support.appendingPathComponent("DevNotes", isDirectory: true)
+            isUbiquitous = false
         }
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        return FileNoteStore(directory: directory)
+        return FileNoteStore(directory: directory, isUbiquitous: isUbiquitous)
     }
 
     private func url(for id: NoteID) -> URL {
-        directory.appendingPathComponent(id.rawValue)
+        // IDs originate from file names, but harden anyway: keeping only the last path component
+        // means an ID containing separators or `..` can never address a file outside `directory`.
+        directory.appendingPathComponent((id.rawValue as NSString).lastPathComponent)
     }
 
     public func summaries() async throws -> [NoteSummary] {
@@ -49,17 +65,23 @@ public actor FileNoteStore: NoteRepository {
             options: [.skipsHiddenFiles]
         )) ?? []
         var summaries: [NoteSummary] = []
+        var seen: Set<String> = []
         for fileURL in contents where fileURL.pathExtension == "md" {
-            guard let body = try? String(contentsOf: fileURL, encoding: .utf8) else { continue }
+            let name = fileURL.lastPathComponent
             let modified = (try? fileURL.resourceValues(forKeys: keys).contentModificationDate) ?? .distantPast
-            let note = Note(
-                id: NoteID(fileURL.lastPathComponent),
-                body: body,
-                createdAt: modified,
-                modifiedAt: modified
-            )
-            summaries.append(NoteSummary(note))
+            seen.insert(name)
+            if let cached = summaryCache[name], cached.modified == modified {
+                summaries.append(cached.summary)
+                continue
+            }
+            guard let body = try? String(contentsOf: fileURL, encoding: .utf8) else { continue }
+            let note = Note(id: NoteID(name), body: body, createdAt: modified, modifiedAt: modified)
+            let summary = NoteSummary(note)
+            summaryCache[name] = (modified, summary)
+            summaries.append(summary)
         }
+        // Drop cache entries for files that no longer exist so the cache can't grow stale.
+        summaryCache = summaryCache.filter { seen.contains($0.key) }
         return NoteSummary.sortedByModified(summaries)
     }
 

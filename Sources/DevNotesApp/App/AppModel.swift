@@ -50,6 +50,11 @@ public final class AppModel {
     @ObservationIgnored private let watchDirectory: URL?
     @ObservationIgnored private var watcher: DirectoryWatcher?
 
+    /// When true, an `NSMetadataQuery` monitor eagerly downloads remote iCloud changes so they
+    /// land much sooner than waiting for the system to materialise them (sync speed).
+    @ObservationIgnored private let watchUbiquity: Bool
+    @ObservationIgnored private var ubiquityMonitor: UbiquityDownloadMonitor?
+
     /// True while the open note has edits not yet flushed to disk. Guards the external-change
     /// reload so an incoming file event can never clobber what the user is typing.
     @ObservationIgnored private var hasUnsavedEdits = false
@@ -82,12 +87,14 @@ public final class AppModel {
         repository: NoteRepository,
         sync: SyncService,
         defaults: UserDefaults = .standard,
-        watchDirectory: URL? = nil
+        watchDirectory: URL? = nil,
+        watchUbiquity: Bool = false
     ) {
         self.repository = repository
         self.sync = sync
         self.defaults = defaults
         self.watchDirectory = watchDirectory
+        self.watchUbiquity = watchUbiquity
         loadPreferences()
         editor.setOnChange { [weak self] _ in
             self?.hasUnsavedEdits = true
@@ -152,6 +159,16 @@ public final class AppModel {
         }
         box.start()
         watcher = box
+
+        // Eagerly pull remote iCloud edits down (metadata arrives well before the daemon would
+        // download on its own); the directory watcher above then sees the file land.
+        if watchUbiquity, ubiquityMonitor == nil {
+            let monitor = UbiquityDownloadMonitor { [weak self] in
+                Task { @MainActor in await self?.handleExternalChange() }
+            }
+            monitor.start()
+            ubiquityMonitor = monitor
+        }
     }
 
     /// Responds to an external change on the notes directory: refresh the list, and reload the
@@ -284,13 +301,15 @@ public final class AppModel {
         columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
     }
 
-    /// Debounced whole-note save (the sync unit is the whole note, written on pause).
+    /// Debounced whole-note save (the sync unit is the whole note, written on pause). 400ms:
+    /// long enough to coalesce a typing burst, short enough that iCloud upload starts promptly
+    /// after a pause — halved from 800ms as part of the Update06 sync-speed work.
     private func scheduleSave() {
         saveTask?.cancel()
         let id = selectedID
         let body = editor.text
         saveTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 800_000_000)
+            try? await Task.sleep(nanoseconds: 400_000_000)
             guard Task.isCancelled == false, let self, let id else { return }
             await self.persist(id: id, body: body)
         }

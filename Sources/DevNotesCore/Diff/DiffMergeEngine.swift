@@ -156,16 +156,7 @@ public struct DiffMergeEngine: Sendable {
     public func merge(base: String?, mine: String, theirs: String) -> [MergeBlock] {
         let mineLines = mine.splitIntoLines()
         let theirsLines = theirs.splitIntoLines()
-
-        var auto: AutoSide?
-        if let base {
-            let baseLines = base.splitIntoLines()
-            if mineLines == baseLines, theirsLines != baseLines {
-                auto = .theirs
-            } else if theirsLines == baseLines, mineLines != baseLines {
-                auto = .mine
-            }
-        }
+        let auto = autoSide(base: base, mineLines: mineLines, theirsLines: theirsLines)
 
         var blocks: [MergeBlock] = []
         let ops = LCS.diff(mineLines, theirsLines)
@@ -180,35 +171,51 @@ public struct DiffMergeEngine: Sendable {
                 blocks.append(.unchanged(run))
                 continue
             }
-            var deletes: [String] = []
-            var inserts: [String] = []
-            collecting: while index < ops.count {
-                switch ops[index] {
-                case .equal:
-                    break collecting
-                case let .delete(line):
-                    deletes.append(line)
-                    index += 1
-                case let .insert(line):
-                    inserts.append(line)
-                    index += 1
-                }
-            }
-            switch auto {
-            case .mine:
-                blocks.append(.mineOnly(deletes))
-            case .theirs:
-                blocks.append(.theirsOnly(inserts))
-            case nil:
-                if inserts.isEmpty {
-                    blocks.append(.mineOnly(deletes))
-                } else if deletes.isEmpty {
-                    blocks.append(.theirsOnly(inserts))
-                } else {
-                    blocks.append(.conflict(mine: deletes, theirs: inserts))
-                }
-            }
+            let (deletes, inserts) = collectDivergence(ops, from: &index)
+            blocks.append(divergenceBlock(deletes: deletes, inserts: inserts, auto: auto))
         }
         return blocks
+    }
+
+    /// When `base` shows exactly one side changed, that side's edits can be auto-resolved.
+    private func autoSide(base: String?, mineLines: [String], theirsLines: [String]) -> AutoSide? {
+        guard let base else { return nil }
+        let baseLines = base.splitIntoLines()
+        if mineLines == baseLines, theirsLines != baseLines { return .theirs }
+        if theirsLines == baseLines, mineLines != baseLines { return .mine }
+        return nil
+    }
+
+    /// Consumes the contiguous non-equal run starting at `index`, returning its two sides.
+    private func collectDivergence(_ ops: [Change<String>], from index: inout Int) -> (deletes: [String], inserts: [String]) {
+        var deletes: [String] = []
+        var inserts: [String] = []
+        collecting: while index < ops.count {
+            switch ops[index] {
+            case .equal:
+                break collecting
+            case let .delete(line):
+                deletes.append(line)
+                index += 1
+            case let .insert(line):
+                inserts.append(line)
+                index += 1
+            }
+        }
+        return (deletes, inserts)
+    }
+
+    /// Classifies one divergent run into an auto-resolvable side or a conflict block.
+    private func divergenceBlock(deletes: [String], inserts: [String], auto: AutoSide?) -> MergeBlock {
+        switch auto {
+        case .mine:
+            return .mineOnly(deletes)
+        case .theirs:
+            return .theirsOnly(inserts)
+        case nil:
+            if inserts.isEmpty { return .mineOnly(deletes) }
+            if deletes.isEmpty { return .theirsOnly(inserts) }
+            return .conflict(mine: deletes, theirs: inserts)
+        }
     }
 }

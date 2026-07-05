@@ -44,7 +44,11 @@ struct SettingsView: View {
             }
 
             Section("Editor Style") {
-                Text("Style the editor with one `token: value` per line. Only the tokens below are honoured — anything else is safely ignored (never executed as CSS). See the README for the full catalog and more examples.")
+                Text(
+                    "Style the editor with one `token: value` per line. Only the tokens below are honoured "
+                        + "— anything else is safely ignored (never executed as CSS). See the README for the "
+                        + "full catalog and more examples."
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
