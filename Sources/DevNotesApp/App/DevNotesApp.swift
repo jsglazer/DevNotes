@@ -21,7 +21,7 @@ struct DevNotesApp: App {
             }
             return captured
         })
-        _model = State(initialValue: AppModel(repository: store, sync: sync))
+        _model = State(initialValue: AppModel(repository: store, sync: sync, watchDirectory: store.directory))
     }
 
     var body: some Scene {

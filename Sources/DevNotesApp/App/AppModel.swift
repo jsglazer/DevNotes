@@ -45,6 +45,15 @@ public final class AppModel {
     private let sync: SyncService
     @ObservationIgnored private let defaults: UserDefaults
 
+    /// Directory to watch for external file changes (iCloud downloads, edits from another device).
+    /// `nil` disables watching (tests/previews that pass an in-memory repository).
+    @ObservationIgnored private let watchDirectory: URL?
+    @ObservationIgnored private var watcher: DirectoryWatcher?
+
+    /// True while the open note has edits not yet flushed to disk. Guards the external-change
+    /// reload so an incoming file event can never clobber what the user is typing.
+    @ObservationIgnored private var hasUnsavedEdits = false
+
     public private(set) var summaries: [NoteSummary] = []
     public var selectedID: NoteID?
     public var searchQuery = ""
@@ -69,12 +78,29 @@ public final class AppModel {
 
     private var saveTask: Task<Void, Never>?
 
-    public init(repository: NoteRepository, sync: SyncService, defaults: UserDefaults = .standard) {
+    public init(
+        repository: NoteRepository,
+        sync: SyncService,
+        defaults: UserDefaults = .standard,
+        watchDirectory: URL? = nil
+    ) {
         self.repository = repository
         self.sync = sync
         self.defaults = defaults
+        self.watchDirectory = watchDirectory
         loadPreferences()
-        editor.setOnChange { [weak self] _ in self?.scheduleSave() }
+        editor.setOnChange { [weak self] _ in
+            self?.hasUnsavedEdits = true
+            self?.scheduleSave()
+        }
+    }
+
+    /// The open note's display title (first non-empty line, heading markers stripped), derived
+    /// live from the editor text so it tracks edits. Empty when no note is open.
+    public var activeTitle: String {
+        guard selectedID != nil else { return "" }
+        let now = Date()
+        return Note(id: NoteID(""), body: editor.text, createdAt: now, modifiedAt: now).title
     }
 
     private func loadPreferences() {
@@ -114,6 +140,31 @@ public final class AppModel {
         await refresh()
         editor.style = styleSheet
         await selectFirstIfNeeded()
+        startWatchingIfNeeded()
+    }
+
+    /// Begins watching the notes directory for external changes so edits landing from iCloud (or
+    /// another device) surface without the user having to switch notes. Idempotent.
+    private func startWatchingIfNeeded() {
+        guard watcher == nil, let watchDirectory else { return }
+        let box = DirectoryWatcher(url: watchDirectory) { [weak self] in
+            Task { @MainActor in await self?.handleExternalChange() }
+        }
+        box.start()
+        watcher = box
+    }
+
+    /// Responds to an external change on the notes directory: refresh the list, and reload the
+    /// open note from disk when it changed and the user has no unsaved edits (never clobbering
+    /// in-progress typing).
+    private func handleExternalChange() async {
+        await refresh()
+        guard hasUnsavedEdits == false, let id = selectedID,
+              let note = try? await repository.load(id) else { return }
+        if note.body != editor.text {
+            let clamped = min(editor.selection.location, (note.body as NSString).length)
+            editor.load(text: note.body, selection: .caret(clamped))
+        }
     }
 
     /// On open, land on the note at the top of the list so the user starts editing immediately.
@@ -141,8 +192,9 @@ public final class AppModel {
     public func select(_ id: NoteID) async {
         selectedID = id
         guard let note = try? await repository.load(id) else { return }
-        editor.text = note.body
-        editor.selection = caretForOpen(in: note.body)
+        // `load` (not a plain `editor.text =`) so opening a note doesn't schedule a save and
+        // re-sort the list — the file's modified date must change only on a real edit.
+        editor.load(text: note.body, selection: caretForOpen(in: note.body))
         editor.style = styleSheet
     }
 
@@ -249,6 +301,8 @@ public final class AppModel {
         let existing = try? await repository.load(id)
         let note = Note(id: id, body: body, createdAt: existing?.createdAt ?? now, modifiedAt: now)
         try? await repository.save(note)
+        // Only clear the unsaved flag if no newer edit slipped in while we were writing.
+        if body == editor.text { hasUnsavedEdits = false }
         await refresh()
     }
 

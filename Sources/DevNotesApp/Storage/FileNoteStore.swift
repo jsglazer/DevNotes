@@ -10,7 +10,10 @@ import Foundation
 /// fetch/CloudKit in views" boundary is trivially upheld, and note content only ever originates
 /// here (never in a derived cache).
 public actor FileNoteStore: NoteRepository {
-    private let directory: URL
+    /// The notes directory (iCloud ubiquity container in production, a local dir in tests). Exposed
+    /// as `nonisolated` so the composition root can hand it to a `DirectoryWatcher` without awaiting
+    /// the actor; it is an immutable `Sendable` value, so this is safe.
+    public nonisolated let directory: URL
     // Each access resolves the process-wide `FileManager.default` inside the actor's isolation,
     // so no non-Sendable instance ever crosses an isolation boundary.
     private var fileManager: FileManager { .default }

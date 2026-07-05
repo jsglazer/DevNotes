@@ -3,8 +3,9 @@ import SwiftUI
 
 /// A native **TextKit 2** editing surface (NOT a WebView) — required for launch speed and for
 /// the cursor/selection control the outline operations depend on. It binds two-way to the
-/// editor's `text` and `selection`, applies the sanitised `StyleSheet` to the text container, and
-/// honours the View-menu preferences for soft-wrapping and the line-number gutter.
+/// editor's `text` and `selection`, applies the sanitised `StyleSheet` (plus live Markdown syntax
+/// coloring) to the text container, continues list markers on Return, and honours the View-menu
+/// preferences for soft-wrapping and the line-number gutter.
 struct MarkdownTextView: View {
     @Binding var text: String
     @Binding var selection: DevNotesCore.TextSelection
@@ -73,10 +74,11 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         }
         applyWrapping(to: textView, in: scrollView)
 
-        let attributes = StyleApplier().bodyAttributes(from: style)
-        textView.typingAttributes = attributes
+        textView.typingAttributes = StyleApplier().bodyAttributes(from: style)
+        if let storage = textView.textStorage {
+            MarkdownHighlighter(style: style).apply(to: storage)
+        }
         let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
-        textView.textStorage?.setAttributes(attributes, range: fullRange)
 
         let desired = NSRange(location: selection.location, length: selection.length)
         if textView.selectedRange() != desired, NSMaxRange(desired) <= fullRange.length {
@@ -112,6 +114,7 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         var parent: MarkdownTextViewRepresentable
         weak var textView: NSTextView?
         weak var ruler: LineNumberRulerView?
+        private let engine = OutlineEngine()
 
         init(_ parent: MarkdownTextViewRepresentable) { self.parent = parent }
 
@@ -132,10 +135,36 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             ruler?.needsDisplay = true
         }
 
+        /// Intercepts Return to continue (or exit) a list marker via the pure `OutlineEngine`,
+        /// so bullets and numbered items auto-continue on the next line.
+        func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            guard commandSelector == #selector(NSResponder.insertNewline(_:)) else { return false }
+            let range = textView.selectedRange()
+            let selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
+            let edit = engine.insertNewline(text: textView.string, selection: selection)
+
+            let full = NSRange(location: 0, length: (textView.string as NSString).length)
+            if textView.shouldChangeText(in: full, replacementString: edit.text) {
+                textView.textStorage?.replaceCharacters(in: full, with: edit.text)
+                textView.didChangeText()
+            }
+            textView.setSelectedRange(NSRange(location: edit.selection.location, length: edit.selection.length))
+            parent.text = edit.text
+            parent.selection = edit.selection
+            if let storage = textView.textStorage {
+                MarkdownHighlighter(style: parent.style).apply(to: storage)
+            }
+            ruler?.needsDisplay = true
+            return true
+        }
+
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             parent.text = textView.string
             parent.selection = DevNotesCore.TextSelection(location: textView.selectedRange().location, length: textView.selectedRange().length)
+            if let storage = textView.textStorage {
+                MarkdownHighlighter(style: parent.style).apply(to: storage)
+            }
             ruler?.needsDisplay = true
         }
 
@@ -225,41 +254,176 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    func makeUIView(context: Context) -> UITextView {
+    func makeUIView(context: Context) -> EditorContainerView {
         // UITextView uses the TextKit 2 stack by default on iOS 16+.
         let textView = UITextView()
         textView.delegate = context.coordinator
         textView.autocorrectionType = .no
         textView.textContainerInset = UIEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
-        return textView
+        textView.backgroundColor = .clear
+        let container = EditorContainerView(textView: textView)
+        context.coordinator.container = container
+        return container
     }
 
-    func updateUIView(_ textView: UITextView, context: Context) {
+    func updateUIView(_ container: EditorContainerView, context: Context) {
         context.coordinator.parent = self
+        let textView = container.textView
         if textView.text != text {
             textView.text = text
         }
         textView.typingAttributes = StyleApplier().bodyAttributes(from: style)
+        MarkdownHighlighter(style: style).apply(to: textView.textStorage)
+
         let length = (textView.text as NSString).length
         let desired = NSRange(location: selection.location, length: selection.length)
         if NSMaxRange(desired) <= length {
             textView.selectedRange = desired
         }
+        if container.showLineNumbers != showLineNumbers {
+            container.showLineNumbers = showLineNumbers
+        }
+        container.gutter.setNeedsDisplay()
     }
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: MarkdownTextViewRepresentable
+        weak var container: EditorContainerView?
+        private let engine = OutlineEngine()
+
         init(_ parent: MarkdownTextViewRepresentable) { self.parent = parent }
+
+        /// Intercepts Return to continue (or exit) a list marker via the pure `OutlineEngine`.
+        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+            guard text == "\n" else { return true }
+            let selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
+            let edit = engine.insertNewline(text: textView.text, selection: selection)
+            textView.text = edit.text
+            textView.typingAttributes = StyleApplier().bodyAttributes(from: parent.style)
+            MarkdownHighlighter(style: parent.style).apply(to: textView.textStorage)
+            textView.selectedRange = NSRange(location: edit.selection.location, length: edit.selection.length)
+            parent.text = edit.text
+            parent.selection = edit.selection
+            container?.gutter.setNeedsDisplay()
+            return false
+        }
 
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
+            MarkdownHighlighter(style: parent.style).apply(to: textView.textStorage)
             let range = textView.selectedRange
             parent.selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
+            container?.gutter.setNeedsDisplay()
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
             let range = textView.selectedRange
             parent.selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
+        }
+
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            container?.gutter.setNeedsDisplay()
+        }
+    }
+}
+
+/// Hosts the editor's `UITextView` and an optional line-number gutter drawn to its left. The
+/// gutter is a non-scrolling overlay that reads the text view's live layout + scroll offset, so it
+/// stays aligned as the user types and scrolls.
+final class EditorContainerView: UIView {
+    let textView: UITextView
+    let gutter: IOSLineNumberGutter
+    private let gutterWidth: CGFloat = 40
+
+    var showLineNumbers = false {
+        didSet {
+            gutter.isHidden = !showLineNumbers
+            var inset = textView.textContainerInset
+            inset.left = showLineNumbers ? gutterWidth + 4 : 8
+            textView.textContainerInset = inset
+            gutter.setNeedsDisplay()
+        }
+    }
+
+    init(textView: UITextView) {
+        self.textView = textView
+        self.gutter = IOSLineNumberGutter(textView: textView)
+        super.init(frame: .zero)
+        addSubview(textView)
+        addSubview(gutter)
+        gutter.isHidden = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        textView.frame = bounds
+        gutter.frame = CGRect(x: 0, y: 0, width: gutterWidth, height: bounds.height)
+        gutter.setNeedsDisplay()
+    }
+}
+
+/// The iOS counterpart to `LineNumberRulerView`: numbers logical lines by enumerating the layout
+/// fragments and counting preceding newlines, offset by the text view's scroll position.
+final class IOSLineNumberGutter: UIView {
+    private weak var textView: UITextView?
+
+    init(textView: UITextView) {
+        self.textView = textView
+        super.init(frame: .zero)
+        backgroundColor = .clear
+        isUserInteractionEnabled = false
+        contentMode = .redraw
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func draw(_ rect: CGRect) {
+        guard let textView,
+              let layoutManager = textView.textLayoutManager,
+              let contentManager = layoutManager.textContentManager
+        else { return }
+
+        UIColor.secondarySystemBackground.withAlphaComponent(0.6).setFill()
+        UIRectFill(rect)
+        let separator = UIBezierPath()
+        separator.move(to: CGPoint(x: bounds.maxX - 0.5, y: rect.minY))
+        separator.addLine(to: CGPoint(x: bounds.maxX - 0.5, y: rect.maxY))
+        UIColor.separator.setStroke()
+        separator.stroke()
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular),
+            .foregroundColor: UIColor.secondaryLabel
+        ]
+
+        let string = textView.text as NSString
+        let insetTop = textView.textContainerInset.top
+        let offsetY = textView.contentOffset.y
+        let documentStart = contentManager.documentRange.location
+
+        layoutManager.enumerateTextLayoutFragments(
+            from: contentManager.documentRange.location,
+            options: [.ensuresLayout]
+        ) { fragment in
+            let fragmentFrame = fragment.layoutFragmentFrame
+            let y = fragmentFrame.minY + insetTop - offsetY
+
+            if y + fragmentFrame.height >= rect.minY, y <= rect.maxY {
+                let offset = contentManager.offset(from: documentStart, to: fragment.rangeInElement.location)
+                let lineNumber = string.substring(to: min(offset, string.length))
+                    .reduce(1) { $0 + ($1 == "\n" ? 1 : 0) }
+                let label = "\(lineNumber)" as NSString
+                let size = label.size(withAttributes: attributes)
+                label.draw(
+                    at: CGPoint(x: bounds.maxX - size.width - 6, y: y),
+                    withAttributes: attributes
+                )
+            }
+            return true
         }
     }
 }

@@ -11,6 +11,7 @@ struct ContentView: View {
     #if os(iOS)
     @State private var isNotesListPresented = false
     @State private var isOutlineToolsPresented = false
+    @State private var isSettingsPresented = false
     #endif
 
     var body: some View {
@@ -56,12 +57,36 @@ struct ContentView: View {
     private var iosBody: some View {
         EditorPane(model: model)
             .safeAreaInset(edge: .top, spacing: 0) {
-                IOSTopBar(
-                    editor: model.editor,
-                    onShowNotes: { isNotesListPresented = true },
-                    onNewNote: { Task { await model.newNote() } },
-                    onOutlineTools: { isOutlineToolsPresented = true }
-                )
+                VStack(spacing: 0) {
+                    if model.selectedID != nil {
+                        Text(model.activeTitle.isEmpty ? "Untitled" : model.activeTitle)
+                            .font(.headline.bold())
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 8)
+                    }
+                    IOSTopBar(
+                        editor: model.editor,
+                        onShowNotes: { isNotesListPresented = true },
+                        onNewNote: { Task { await model.newNote() } },
+                        onOutlineTools: { isOutlineToolsPresented = true }
+                    )
+                }
+                .background(.bar)
+            }
+            .toolbar {
+                // A key at the bottom-right of the keyboard accessory bar to dismiss the keyboard.
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button {
+                        UIApplication.shared.sendAction(
+                            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+                        )
+                    } label: {
+                        Image(systemName: "keyboard.chevron.compact.down")
+                    }
+                }
             }
             .sheet(isPresented: $isNotesListPresented) {
                 NavigationStack {
@@ -69,8 +94,27 @@ struct ContentView: View {
                         .navigationTitle("Notes")
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button {
+                                    isSettingsPresented = true
+                                } label: {
+                                    Image(systemName: "gearshape")
+                                }
+                            }
                             ToolbarItem(placement: .confirmationAction) {
                                 Button("Done") { isNotesListPresented = false }
+                            }
+                        }
+                        .sheet(isPresented: $isSettingsPresented) {
+                            NavigationStack {
+                                SettingsView(model: model)
+                                    .navigationTitle("Settings")
+                                    .navigationBarTitleDisplayMode(.inline)
+                                    .toolbar {
+                                        ToolbarItem(placement: .confirmationAction) {
+                                            Button("Done") { isSettingsPresented = false }
+                                        }
+                                    }
                             }
                         }
                 }

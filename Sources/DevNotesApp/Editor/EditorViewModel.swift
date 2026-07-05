@@ -9,7 +9,7 @@ import Observation
 @Observable
 public final class EditorViewModel {
     public var text: String {
-        didSet { onChange?(text) }
+        didSet { if isLoadingContent == false { onChange?(text) } }
     }
 
     public var selection: TextSelection
@@ -17,6 +17,11 @@ public final class EditorViewModel {
 
     private let engine = OutlineEngine()
     private var onChange: ((String) -> Void)?
+
+    /// True only while a note is being loaded for display. Assigning `text` during a load must NOT
+    /// notify `onChange` — otherwise merely *opening* a note schedules a save, which bumps the
+    /// file's modified date and re-sorts the list even though the user changed nothing.
+    private var isLoadingContent = false
 
     public init(text: String = "", selection: TextSelection = .caret(0), style: StyleSheet = StyleSheet()) {
         self.text = text
@@ -26,6 +31,16 @@ public final class EditorViewModel {
 
     public func setOnChange(_ handler: ((String) -> Void)?) {
         onChange = handler
+    }
+
+    /// Loads note content for display WITHOUT triggering `onChange`/save. Use this whenever the
+    /// text is being populated from disk (opening a note, or an external file change landing) so
+    /// viewing a note never marks it modified.
+    public func load(text: String, selection: TextSelection) {
+        isLoadingContent = true
+        self.text = text
+        self.selection = selection
+        isLoadingContent = false
     }
 
     /// Runs a parameterless outline command (bullet, indent, move-line, Enter, …).

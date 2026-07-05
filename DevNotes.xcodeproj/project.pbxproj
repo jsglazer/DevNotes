@@ -26,6 +26,7 @@
 		54B34B0EB085B6FBD9E0D1E9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1A860FB05EAB52091F7E732 /* Assets.xcassets */; };
 		5BA5DF0D50244B5E12621C5E /* DevNotesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94A60EA2683E7A52725CD37D /* DevNotesApp.swift */; };
 		76EC511C1A487046CD2F4C04 /* Exporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE46C25B88AA794F2EC223B5 /* Exporter.swift */; };
+		7B86C2358CB76E1ACE631E08 /* MarkdownHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 949B96DED5CC2D4B246D1DD0 /* MarkdownHighlighter.swift */; };
 		7DF3D12B8DBE72288EC31BA1 /* DevNotesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94A60EA2683E7A52725CD37D /* DevNotesApp.swift */; };
 		957B4D7FD1A76BAA4E3C0FC1 /* CloudKitSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05BDA9F5F7B3A8E23672923 /* CloudKitSyncService.swift */; };
 		9B0349E5A97ABE1D06065530 /* SearchBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C40DA45CA4C483357AA0A0 /* SearchBarView.swift */; };
@@ -34,10 +35,13 @@
 		A6176ECE962FBBE348D28965 /* StyleApplier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 266C558014E2ED98542A0B55 /* StyleApplier.swift */; };
 		AC0EDF7A2AB5B0ACAE60DB1D /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07E21273C76AF127D488862A /* SidebarView.swift */; };
 		ADF79F5C4EE780C0FBE1F50E /* AppCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54443370DFE141913BD80CE1 /* AppCommands.swift */; };
+		AF234A3D36733DDF2559BF46 /* DirectoryWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19AC917B06781CF791567829 /* DirectoryWatcher.swift */; };
 		B185B25417465230ADD162E9 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78AFA6F523DB880932AA9022 /* SettingsView.swift */; };
+		C3A02068ED29E1A780B31A51 /* DirectoryWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19AC917B06781CF791567829 /* DirectoryWatcher.swift */; };
 		CCD13E57E86E751EA519B6AE /* DevNotesCore in Frameworks */ = {isa = PBXBuildFile; productRef = 65B852DFA661A75457C78948 /* DevNotesCore */; };
 		D572009A6469620A88BCBF45 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EECFD32311AD536926457D89 /* AppModel.swift */; };
 		D666C440E8E5E8F56CC1EB3E /* EditorToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03974BA7354B2EECDAEE9388 /* EditorToolbar.swift */; };
+		D8306F8858AD7A297001A707 /* MarkdownHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 949B96DED5CC2D4B246D1DD0 /* MarkdownHighlighter.swift */; };
 		D91F2D71EFEBC1C7D52D5B25 /* AppCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54443370DFE141913BD80CE1 /* AppCommands.swift */; };
 		DD4106FA063CC7FE9AC3EAB1 /* Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45CBA42A05533BE57D164B37 /* Platform.swift */; };
 		DFD1233F91122C755E3284E4 /* MergeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2F0B1922CE23BDBCA098662 /* MergeView.swift */; };
@@ -50,12 +54,14 @@
 /* Begin PBXFileReference section */
 		03974BA7354B2EECDAEE9388 /* EditorToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorToolbar.swift; sourceTree = "<group>"; };
 		07E21273C76AF127D488862A /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		19AC917B06781CF791567829 /* DirectoryWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectoryWatcher.swift; sourceTree = "<group>"; };
 		266C558014E2ED98542A0B55 /* StyleApplier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StyleApplier.swift; sourceTree = "<group>"; };
 		2C9CD00750279F380D3F8A1B /* DevNotes.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DevNotes.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		45CBA42A05533BE57D164B37 /* Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Platform.swift; sourceTree = "<group>"; };
 		54443370DFE141913BD80CE1 /* AppCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCommands.swift; sourceTree = "<group>"; };
 		71566D09682A6781E0210572 /* MarkdownTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownTextView.swift; sourceTree = "<group>"; };
 		78AFA6F523DB880932AA9022 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		949B96DED5CC2D4B246D1DD0 /* MarkdownHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownHighlighter.swift; sourceTree = "<group>"; };
 		94A60EA2683E7A52725CD37D /* DevNotesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevNotesApp.swift; sourceTree = "<group>"; };
 		966D8EE4084AE8B2A77F02E7 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		994BF6A1718A5BD6406A8404 /* DevNotes-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "DevNotes-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -94,6 +100,7 @@
 		0F7022C6EFE1A93868DC3DA8 /* Storage */ = {
 			isa = PBXGroup;
 			children = (
+				19AC917B06781CF791567829 /* DirectoryWatcher.swift */,
 				A24629D5B796D7A3F7C5DCC1 /* FileNoteStore.swift */,
 			);
 			path = Storage;
@@ -200,6 +207,7 @@
 			isa = PBXGroup;
 			children = (
 				D9415E031840711DCEE435B1 /* EditorViewModel.swift */,
+				949B96DED5CC2D4B246D1DD0 /* MarkdownHighlighter.swift */,
 				71566D09682A6781E0210572 /* MarkdownTextView.swift */,
 				266C558014E2ED98542A0B55 /* StyleApplier.swift */,
 			);
@@ -320,11 +328,13 @@
 				1F9515B7D040E76C0EBDB02F /* CloudKitSyncService.swift in Sources */,
 				53A1D1B351449AEA9F059851 /* ContentView.swift in Sources */,
 				7DF3D12B8DBE72288EC31BA1 /* DevNotesApp.swift in Sources */,
+				C3A02068ED29E1A780B31A51 /* DirectoryWatcher.swift in Sources */,
 				37F78C743F15704ADFC2BC1C /* EditorPane.swift in Sources */,
 				D666C440E8E5E8F56CC1EB3E /* EditorToolbar.swift in Sources */,
 				A2591EC31933C83B75CEBA33 /* EditorViewModel.swift in Sources */,
 				76EC511C1A487046CD2F4C04 /* Exporter.swift in Sources */,
 				3DB0DFA733FB3313B9B37AF5 /* FileNoteStore.swift in Sources */,
+				D8306F8858AD7A297001A707 /* MarkdownHighlighter.swift in Sources */,
 				FF9CDA04A2BB550817D46576 /* MarkdownTextView.swift in Sources */,
 				42A21882CDC652F4C7551BFF /* MergeView.swift in Sources */,
 				DD4106FA063CC7FE9AC3EAB1 /* Platform.swift in Sources */,
@@ -344,11 +354,13 @@
 				957B4D7FD1A76BAA4E3C0FC1 /* CloudKitSyncService.swift in Sources */,
 				24A8DD2CBDE0E51E9540D0FD /* ContentView.swift in Sources */,
 				5BA5DF0D50244B5E12621C5E /* DevNotesApp.swift in Sources */,
+				AF234A3D36733DDF2559BF46 /* DirectoryWatcher.swift in Sources */,
 				44E61C1935A81DAD293CF26D /* EditorPane.swift in Sources */,
 				4F7FA118EA4D5D74BF8A1A51 /* EditorToolbar.swift in Sources */,
 				A50F24B8372844599BFBF6CC /* EditorViewModel.swift in Sources */,
 				3A4D4B516AE77E8EB92786C7 /* Exporter.swift in Sources */,
 				49283FCC05EBB80EEFA1E97C /* FileNoteStore.swift in Sources */,
+				7B86C2358CB76E1ACE631E08 /* MarkdownHighlighter.swift in Sources */,
 				009A70C087CFC5D44DEC4A6C /* MarkdownTextView.swift in Sources */,
 				DFD1233F91122C755E3284E4 /* MergeView.swift in Sources */,
 				EE6CF05EFF07C0A845033E2E /* Platform.swift in Sources */,
@@ -435,7 +447,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.5;
+				MARKETING_VERSION = 1.0.6;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -574,7 +586,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.5;
+				MARKETING_VERSION = 1.0.6;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

@@ -27,6 +27,11 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
             }
 
+            Section("Editor") {
+                Toggle("Wrap text", isOn: $model.wrapText)
+                Toggle("Show line numbers", isOn: $model.showLineNumbers)
+            }
+
             Section("On Open") {
                 Picker("Jump to", selection: $model.openJump) {
                     Text("First line").tag(OpenJump.firstLine)
