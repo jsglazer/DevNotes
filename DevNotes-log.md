@@ -1,3 +1,27 @@
+# Exchange Log - 2026-07-04
+
+## User Request
+Deploy DevNotes to my iPhone. "DevNotes" isn't unique in the App Store, so deploy directly to the phone. Per `iOSDeploy.md`, build a `MakeTestFlight.sh`-style script/system to automate deploying apps to iOS.
+
+## Claude Actions
+1. Read `iOSDeploy.md`; found the `DevNotes-iOS` target (bundle `com.jsglazer.DevNotes`) already exists in `project.yml` alongside `DevNotes-iOS.entitlements`.
+2. Surveyed the environment: iPhone 15 Pro Max "Gp15" paired; Apple **Development** signing identity present; **no** Apple Distribution cert and **no** App Store Connect API key on disk; Xcode 26.6.
+3. Asked which mechanism to automate. User chose **direct device install** (matches the "name isn't unique" concern — never touches the store, no ASC record, no API key).
+4. Regenerated `DevNotes.xcodeproj` via `xcodegen`; confirmed the `DevNotes-iOS` scheme builds and signs for the device (cross-platform code compiles — no AppKit-only TextKit breakage). Auto-provisioning created `iOS Team Provisioning Profile: com.jsglazer.DevNotes`.
+5. Wrote `MakeiOSDeploy.sh`: auto-detects the single paired iPhone (bash-3.2-safe, no `mapfile`), `xcodegen generate`, `xcodebuild build` against **generic/platform=iOS** (so the build doesn't need the phone awake), then `xcrun devicectl device install` (+ optional launch). Flags: `--device <UDID>`, `--no-launch`, `--build-only`. Reusable — copy to another iOS app and change the PROJECT/SCHEME/BUNDLE_ID header.
+6. Ran it end-to-end: **build + signing succeeded**; the install step could not complete because the phone dropped to `unavailable` (asleep/disconnected) — devicectl error 1011. Hardened the script to (a) build against the generic destination, (b) wait for a real connected state, and (c) abort loudly on install failure instead of falsely reporting success.
+7. Left version at 1.0.5 — deploy-tooling addition, no app-behavior change (consistent with the prior build-infra precedent in this log). `.build/` and `build_log.txt` already gitignored.
+
+**Pending (physical, user action):** connect + unlock the iPhone, then re-run `./MakeiOSDeploy.sh` — the build is already done; only the install/launch remains.
+
+## Issue/Fix Summary Table
+| # | Issue | Fix |
+|---|---|---|
+| 1 | No automated iOS deploy path (dev-deploy only covers Obsidian/Apps-DMG/Zotero) | Added `MakeiOSDeploy.sh` — build-sign-install to a paired device via `xcrun devicectl` |
+| 2 | `mapfile` for device detection fails under macOS bash 3.2 | Rewrote detection with a portable `python3` JSON parse + newline count |
+| 3 | Build required the phone to be awake (destination `platform=iOS,id=...` failed when device slept) | Build against `generic/platform=iOS`; only the install step needs the device |
+| 4 | Install failure (error 1011) was masked by `\| grep ... \|\| true`, script falsely printed "Done" | Check `PIPESTATUS`, add a connect-readiness wait loop, abort with guidance on failure |
+
 # Exchange Log - 2026-07-03
 
 ## User Request
