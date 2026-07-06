@@ -14,7 +14,10 @@ DevNotes is an ultra-fast, lightweight, offline-first Markdown editor for macOS 
 - **Live Markdown Syntax Coloring:** Markdown markers are colored in place as you type — heading lines take a color per level, markers and text alike (`#` red `#D8564F`, `##` orange `#E07D2C`, `###` yellow `#DAB22E`, `####`+ green `#89AC40`), list markers in blue, inline `` `code` `` in teal monospace, **bold**/*italic* delimiters highlighted, plus blockquotes and links — layered over your custom editor style without any WebView.
 - **Line Numbers Everywhere:** A **line-number gutter** on both macOS and iOS. Toggle it (and **Wrap Text**) from the **View** menu on macOS or from **Settings** on iOS.
 - **Auto-Continuing Lists:** Press **Return** in a bullet or numbered item and the next line continues the list automatically; pressing Return on an empty item exits the list.
-- **View Menu Controls:** Toggle **Wrap Text** and the **line-number gutter**, and switch between **System / Light / Dark** themes.
+- **View Menu Controls:** Toggle **Wrap Text**, the **line-number gutter**, and **Check Spelling While Typing**, and switch between **System / Light / Dark** themes.
+- **Configurable Keyboard Shortcuts:** Every editor and navigation action is bound through a user-editable `~/.config/devnotes/keymap.json` (created on first launch, pre-filled with every bindable action so the file itself is the catalog). Defaults follow standard-macOS conventions — indent/outdent with **Tab / Shift-Tab**, move a line with **⌃⌥↑ / ⌃⌥↓**, jump notes with **⌥⌘↑ / ⌥⌘↓**, select to the top/bottom of a note with **⇧⌘↑ / ⇧⌘↓**, and toggle wrap (**⇧⌘W**) and line numbers (**⇧⌘N**). **Settings → Keyboard Shortcuts** shows the full list and flags any bad edits.
+- **Basic Spell Checking:** Continuous, in-line spell checking (red underlines) — on by default and toggleable from the **View** menu or **Settings**. It never rewrites your text: automatic correction, text substitutions, and grammar checking stay off so code and identifiers are left alone.
+- **Follows the Caret:** The editor auto-scrolls to keep the cursor in view, so text typed at the bottom of the window is never clipped.
 - **Export & Print:** From the **File** menu, export the open note as **Markdown** or **plain text**, or **Save as PDF** (rendered with your editor styling).
 - **Regex Search:** Advanced search supporting regular expressions, whole-word filtering, and case-sensitivity.
 - **Outline Editing Tools:** Built-in actions to toggle bullets and numbered lists (with continuous auto-formatting), indent and outdent lines, increment/decrement headings, and move lines up or down.
@@ -34,11 +37,12 @@ DevNotes is an ultra-fast, lightweight, offline-first Markdown editor for macOS 
    - **`Diff` & `Merge`:** Implements Longest Common Subsequence (LCS) diffing, 3-way merge logic, and side-by-side/inline highlight generation.
    - **`Search`:** Evaluates regex, case sensitivity, and whole-word matching logic.
    - **`Style`:** Parses and sanitizes custom stylesheet configurations against a strict blocklist/allowlist.
+   - **`Keymap`:** Defines the closed catalog of bindable actions, parses/serializes key chords, and merges a user's `keymap.json` over the built-in defaults (with duplicate/parse warnings) — all pure and headless-tested.
    - **`Model` & `Repository`:** Handles entities like `Note` and `Conflict` along with the in-memory fake repositories for testing.
 
 2. **`DevNotesApp`:** The SwiftUI shell targets macOS and iOS, linking `DevNotesCore` and implementing native platform controls.
    - **`App` & `Storage`:** Implements `AppModel` and `FileNoteStore` for file-system storage under the iCloud ubiquity folder, wrapping `NSFileVersion` for conflict detection.
-   - **`Editor`:** Builds a native TextKit 2 `NSTextView` / `UITextView` wrapper, avoiding WebViews for extreme efficiency, with a `MarkdownHighlighter` that colors syntax in place and Return routed through the pure outline engine for list continuation.
+   - **`Editor`:** Builds a native TextKit 2 `NSTextView` / `UITextView` wrapper, avoiding WebViews for extreme efficiency, with a `MarkdownHighlighter` that colors syntax in place and Return routed through the pure outline engine for list continuation. On macOS an `EditorTextView` subclass resolves each key press against the loaded keymap (`DevNotesCore/Keymap`) before the field editor's defaults, so Tab-to-indent and the other bindings run through the same pure engine.
    - **`Sync`:** Encapsulates `CloudKitSyncService` (isolating CloudKit dependencies to a single file) and `UbiquityDownloadMonitor`, an `NSMetadataQuery` watcher that eagerly downloads remote iCloud changes as soon as their metadata arrives.
 
 ## Where Your Notes Live (iCloud Sync)
