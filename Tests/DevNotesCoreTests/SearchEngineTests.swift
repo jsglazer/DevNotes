@@ -49,6 +49,37 @@ struct SearchEngineTests {
         ])
     }
 
+    @Test("Replace all substitutes every literal match")
+    func replaceAllLiteral() {
+        let result = SearchEngine.replaceAll(in: "a cat cat", query: "cat", options: SearchOptions(), replacement: "dog")
+        #expect(result == "a dog dog")
+    }
+
+    @Test("Replace all treats a literal replacement verbatim (no $ template expansion)")
+    func replaceAllLiteralDollar() {
+        let result = SearchEngine.replaceAll(in: "price x", query: "x", options: SearchOptions(), replacement: "$5")
+        #expect(result == "price $5")
+    }
+
+    @Test("Replace all expands capture groups in regex mode")
+    func replaceAllRegexTemplate() {
+        let options = SearchOptions(isRegex: true)
+        let result = SearchEngine.replaceAll(in: "2026-07-05", query: "(\\d{4})-(\\d{2})", options: options, replacement: "$2/$1")
+        #expect(result == "07/2026-05")
+    }
+
+    @Test("Replace match rewrites only the indexed occurrence")
+    func replaceMatchByIndex() {
+        let result = SearchEngine.replaceMatch(at: 1, in: "a cat cat", query: "cat", options: SearchOptions(), replacement: "dog")
+        #expect(result?.text == "a cat dog")
+        #expect(result?.replacedRange == TextSelection(location: 6, length: 3))
+    }
+
+    @Test("Replace match returns nil for an out-of-range index")
+    func replaceMatchOutOfRange() {
+        #expect(SearchEngine.replaceMatch(at: 5, in: "a cat", query: "cat", options: SearchOptions(), replacement: "dog") == nil)
+    }
+
     @Test("Filter keeps matching summaries and preserves order")
     func filterSummaries() {
         let summaries = [

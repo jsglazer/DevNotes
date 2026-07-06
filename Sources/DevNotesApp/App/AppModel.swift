@@ -94,6 +94,11 @@ public final class AppModel {
     public private(set) var conflicts: [ConflictRecord] = []
     public let editor = EditorViewModel()
 
+    /// In-editor Find/Replace state (macOS). The bar binds to this; the action methods below read
+    /// it plus the live editor text. `var` (though never reassigned) so `@Bindable` can form
+    /// writable key paths through it for the bar's `$model.find.query` bindings.
+    public var find = FindState()
+
     private var saveTask: Task<Void, Never>?
 
     public init(
@@ -310,6 +315,10 @@ public final class AppModel {
         try? await repository.save(note)
         await refresh()
         await select(id)
+        // Pull keyboard focus into the (now empty) editor so the caret is live immediately.
+        // Without this the "+" button keeps first-responder status and the first keystrokes only
+        // beep with no visible caret — the intermittent "can't type in a new note" report.
+        editor.requestFocus()
     }
 
     public func deleteSelected() async {
@@ -375,6 +384,79 @@ public final class AppModel {
         // Only clear the unsaved flag if no newer edit slipped in while we were writing.
         if body == editor.text { hasUnsavedEdits = false }
         await refresh()
+    }
+
+    // MARK: - Find & replace (macOS in-editor bar)
+
+    /// Opens the Find bar (with the replace row when `replace` is true), seeds matches over the
+    /// open note, and points the cursor at the first match at or after the caret.
+    public func openFind(replace: Bool) {
+        guard selectedID != nil else { return }
+        find.isPresented = true
+        if replace { find.showReplace = true }
+        refreshFindMatches(preferredLocation: editor.selection.location)
+    }
+
+    public func closeFind() {
+        find.isPresented = false
+        editor.requestFocus()
+    }
+
+    /// Recomputes the match list for the current query/options over the open note.
+    public func refreshFindMatches(preferredLocation: Int? = nil) {
+        find.refresh(in: editor.text, preferredLocation: preferredLocation)
+        selectCurrentMatch()
+    }
+
+    public func findNext() {
+        guard find.matches.isEmpty == false else { return }
+        find.advance(by: 1)
+        selectCurrentMatch()
+    }
+
+    public func findPrevious() {
+        guard find.matches.isEmpty == false else { return }
+        find.advance(by: -1)
+        selectCurrentMatch()
+    }
+
+    /// Replaces the current match, then advances the cursor onto the next occurrence.
+    public func replaceCurrent() {
+        guard find.currentIndex >= 0,
+              let result = SearchEngine.replaceMatch(
+                  at: find.currentIndex,
+                  in: editor.text,
+                  query: find.query,
+                  options: find.options,
+                  replacement: find.replacement
+              )
+        else { return }
+        editor.text = result.text
+        // Recompute over the rewritten text; keeping the same index lands on the following match.
+        find.refresh(in: editor.text)
+        find.clampIndex()
+        selectCurrentMatch()
+    }
+
+    /// Replaces every match in the open note in one edit.
+    public func replaceAll() {
+        guard find.query.isEmpty == false else { return }
+        let replaced = SearchEngine.replaceAll(
+            in: editor.text,
+            query: find.query,
+            options: find.options,
+            replacement: find.replacement
+        )
+        guard replaced != editor.text else { return }
+        editor.text = replaced
+        refreshFindMatches(preferredLocation: editor.selection.location)
+    }
+
+    /// Selects (and scrolls to) the current match in the editor without stealing focus from the
+    /// find field — the editor surface honours the selection change on its next update pass.
+    private func selectCurrentMatch() {
+        guard let match = find.currentMatch else { return }
+        editor.selection = match
     }
 
     // MARK: - Conflicts

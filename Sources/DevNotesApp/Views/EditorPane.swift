@@ -13,6 +13,10 @@ struct EditorPane: View {
                 #if os(macOS)
                 EditorToolbar(editor: model.editor)
                 Divider()
+                if model.find.isPresented {
+                    FindReplaceBar(model: model)
+                    Divider()
+                }
                 #endif
                 MarkdownTextView(
                     text: Binding(get: { model.editor.text }, set: { model.editor.text = $0 }),
@@ -21,6 +25,9 @@ struct EditorPane: View {
                     wrapText: model.wrapText,
                     showLineNumbers: model.showLineNumbers,
                     spellCheck: model.spellCheck,
+                    searchMatches: model.find.isPresented ? model.find.matches : [],
+                    currentMatch: model.find.isPresented ? model.find.currentMatch : nil,
+                    focusRequest: model.editor.focusRequest,
                     onKeyChord: { chord in
                         guard let action = model.keymap.action(for: chord) else { return false }
                         return model.perform(action)

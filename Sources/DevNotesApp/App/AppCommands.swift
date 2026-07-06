@@ -31,6 +31,22 @@ struct AppCommands: Commands {
             menuButton("Move Line Down", .moveLineDown)
         }
 
+        // Find/Replace over the open note. Standard macOS shortcuts (⌘F / ⌘⌥F / ⌘G / ⇧⌘G).
+        CommandGroup(after: .textEditing) {
+            Button("Find…") { model.openFind(replace: false) }
+                .keyboardShortcut("f", modifiers: .command)
+                .disabled(model.selectedID == nil)
+            Button("Find and Replace…") { model.openFind(replace: true) }
+                .keyboardShortcut("f", modifiers: [.command, .option])
+                .disabled(model.selectedID == nil)
+            Button("Find Next") { model.findNext() }
+                .keyboardShortcut("g", modifiers: .command)
+                .disabled(model.find.matches.isEmpty)
+            Button("Find Previous") { model.findPrevious() }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+                .disabled(model.find.matches.isEmpty)
+        }
+
         CommandGroup(after: .sidebar) {
             Button(model.columnVisibility == .detailOnly ? "Show Sidebar" : "Hide Sidebar") {
                 model.toggleSidebar()

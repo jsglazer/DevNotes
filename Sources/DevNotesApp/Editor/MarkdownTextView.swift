@@ -13,6 +13,12 @@ struct MarkdownTextView: View {
     var wrapText: Bool = true
     var showLineNumbers: Bool = false
     var spellCheck: Bool = true
+    /// Find/Replace overlay: every match range (highlighted faintly) and the current one
+    /// (highlighted strongly). macOS only; empty/nil elsewhere.
+    var searchMatches: [DevNotesCore.TextSelection] = []
+    var currentMatch: DevNotesCore.TextSelection?
+    /// Bumped by the model to ask the editor to take keyboard focus (new/opened note).
+    var focusRequest = 0
     /// Resolves a pressed key chord to a keymap action; returns true when handled so the editor
     /// consumes the event. Provided by the shell (macOS only); iOS ignores it.
     var onKeyChord: (@MainActor (DevNotesCore.KeyChord) -> Bool)?
@@ -25,6 +31,9 @@ struct MarkdownTextView: View {
             wrapText: wrapText,
             showLineNumbers: showLineNumbers,
             spellCheck: spellCheck,
+            searchMatches: searchMatches,
+            currentMatch: currentMatch,
+            focusRequest: focusRequest,
             onKeyChord: onKeyChord
         )
     }
@@ -40,6 +49,9 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
     var wrapText: Bool
     var showLineNumbers: Bool
     var spellCheck: Bool
+    var searchMatches: [DevNotesCore.TextSelection]
+    var currentMatch: DevNotesCore.TextSelection?
+    var focusRequest: Int
     var onKeyChord: (@MainActor (DevNotesCore.KeyChord) -> Bool)?
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -110,6 +122,7 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             MarkdownHighlighter(style: style).apply(to: storage)
             context.coordinator.didHighlight(text: textView.string, style: style)
         }
+        context.coordinator.applySearchHighlight(matches: searchMatches, current: currentMatch)
         let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
 
         let desired = NSRange(location: selection.location, length: selection.length)
@@ -118,6 +131,15 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             // Keep the caret on-screen after a command-driven selection change (move line,
             // select-to-edge, open-at-last-line) — the view no longer scrolls it off the bottom.
             textView.scrollRangeToVisible(desired)
+        }
+
+        // A bumped focus token asks the editor to take first responder (new/opened note) so the
+        // caret is live without a click. Deferred so it runs after this layout pass settles.
+        if context.coordinator.focusRequestChanged(focusRequest) {
+            DispatchQueue.main.async { [weak textView] in
+                guard let textView, let window = textView.window else { return }
+                window.makeFirstResponder(textView)
+            }
         }
 
         scrollView.rulersVisible = showLineNumbers
@@ -157,9 +179,40 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         private var highlightedStyle: StyleSheet?
         /// Last-seen gutter state, so a line-number toggle can force a re-colour.
         private var lastShowLineNumbers: Bool?
+        /// Last-honoured focus token, so a note open focuses the editor exactly once per bump.
+        private var lastFocusRequest = 0
+        /// True while find-match backgrounds are painted, so we only pay to clear them when some
+        /// were actually applied (never on the ordinary typing path with the bar closed).
+        private var hasSearchHighlight = false
 
         func needsHighlight(text: String, style: StyleSheet) -> Bool {
             highlightedText != text || highlightedStyle != style
+        }
+
+        /// True when the model bumped the focus token since the last pass (records the new value).
+        func focusRequestChanged(_ value: Int) -> Bool {
+            defer { lastFocusRequest = value }
+            return lastFocusRequest != value
+        }
+
+        /// Paints a faint background over every Find match and a stronger one over the current
+        /// match. Cleared and repainted each pass so a changed query/cursor stays in sync; skipped
+        /// entirely when there's nothing to show and nothing was shown last time.
+        @MainActor
+        func applySearchHighlight(matches: [DevNotesCore.TextSelection], current: DevNotesCore.TextSelection?) {
+            guard let storage = textView?.textStorage else { return }
+            guard matches.isEmpty == false || hasSearchHighlight else { return }
+            let full = NSRange(location: 0, length: storage.length)
+            storage.removeAttribute(.backgroundColor, range: full)
+            let all = NSColor.systemYellow.withAlphaComponent(0.35)
+            let focused = NSColor.systemOrange.withAlphaComponent(0.6)
+            for match in matches {
+                let range = NSRange(location: match.location, length: match.length)
+                guard NSMaxRange(range) <= storage.length else { continue }
+                let color = (match == current) ? focused : all
+                storage.addAttribute(.backgroundColor, value: color, range: range)
+            }
+            hasSearchHighlight = matches.isEmpty == false
         }
 
         func didHighlight(text: String, style: StyleSheet) {
@@ -247,72 +300,6 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
     }
 }
 
-/// A gutter that numbers logical (paragraph) lines beside the TextKit 2 text view. It enumerates
-/// the layout fragments the layout manager has produced and labels each one by the number of
-/// newlines that precede its start — soft-wrapped continuations keep the paragraph's single
-/// number, matching common editor behaviour.
-final class LineNumberRulerView: NSRulerView {
-    private weak var textView: NSTextView?
-
-    init(textView: NSTextView, scrollView: NSScrollView) {
-        self.textView = textView
-        super.init(scrollView: scrollView, orientation: .verticalRuler)
-        clientView = textView
-        ruleThickness = 44
-    }
-
-    @available(*, unavailable)
-    required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override func drawHashMarksAndLabels(in rect: NSRect) {
-        guard let textView,
-              let layoutManager = textView.textLayoutManager,
-              let contentManager = layoutManager.textContentManager
-        else { return }
-
-        // Gutter background + trailing separator.
-        NSColor.textBackgroundColor.withAlphaComponent(0.4).setFill()
-        rect.fill()
-        NSColor.separatorColor.setStroke()
-        let separator = NSBezierPath()
-        separator.move(to: NSPoint(x: bounds.maxX - 0.5, y: rect.minY))
-        separator.line(to: NSPoint(x: bounds.maxX - 0.5, y: rect.maxY))
-        separator.stroke()
-
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular),
-            .foregroundColor: NSColor.secondaryLabelColor
-        ]
-
-        let string = textView.string as NSString
-        let inset = textView.textContainerInset.height
-        let yOffset = convert(NSPoint.zero, from: textView).y
-        let documentStart = contentManager.documentRange.location
-
-        layoutManager.enumerateTextLayoutFragments(
-            from: contentManager.documentRange.location,
-            options: [.ensuresLayout]
-        ) { fragment in
-            let fragmentFrame = fragment.layoutFragmentFrame
-            let y = yOffset + fragmentFrame.minY + inset
-
-            // Only draw fragments that fall within the dirty rect.
-            if y + fragmentFrame.height >= rect.minY, y <= rect.maxY {
-                let offset = contentManager.offset(from: documentStart, to: fragment.rangeInElement.location)
-                let lineNumber = string.substring(to: min(offset, string.length))
-                    .reduce(1) { $0 + ($1 == "\n" ? 1 : 0) }
-                let label = "\(lineNumber)" as NSString
-                let size = label.size(withAttributes: attributes)
-                label.draw(
-                    at: NSPoint(x: bounds.maxX - size.width - 6, y: y),
-                    withAttributes: attributes
-                )
-            }
-            return true
-        }
-    }
-}
-
 #elseif os(iOS)
 import UIKit
 
@@ -323,6 +310,10 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
     var wrapText: Bool
     var showLineNumbers: Bool
     var spellCheck: Bool
+    /// Accepted for signature parity with macOS; the Find bar is macOS-only, so iOS ignores these.
+    var searchMatches: [DevNotesCore.TextSelection]
+    var currentMatch: DevNotesCore.TextSelection?
+    var focusRequest: Int
     /// Accepted for signature parity with macOS; iOS uses hardware-keyboard commands elsewhere and
     /// does not route key events through the keymap here.
     var onKeyChord: (@MainActor (DevNotesCore.KeyChord) -> Bool)?

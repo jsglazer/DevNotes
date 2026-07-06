@@ -53,6 +53,49 @@ public enum SearchEngine {
         return ranges
     }
 
+    /// Replaces the single match at `index` (0-based over the ordered matches `matchRanges`
+    /// produces) in `text`. In regex mode `replacement` is an ICU template (`$1`, `$2` reference
+    /// capture groups); in literal mode it is inserted verbatim. Returns the rewritten text and the
+    /// UTF-16 range the inserted replacement now occupies, or `nil` for an out-of-range index or an
+    /// empty/invalid query.
+    public static func replaceMatch(
+        at index: Int,
+        in text: String,
+        query: String,
+        options: SearchOptions,
+        replacement: String
+    ) -> (text: String, replacedRange: TextSelection)? {
+        guard let regex = makeRegex(query: query, options: options) else { return nil }
+        let ns = text as NSString
+        let full = NSRange(location: 0, length: ns.length)
+        var matches: [NSTextCheckingResult] = []
+        regex.enumerateMatches(in: text, options: [], range: full) { match, _, _ in
+            if let match, match.range.location != NSNotFound { matches.append(match) }
+        }
+        guard index >= 0, index < matches.count else { return nil }
+        let match = matches[index]
+        let template = options.isRegex ? replacement : NSRegularExpression.escapedTemplate(for: replacement)
+        let expanded = regex.replacementString(for: match, in: text, offset: 0, template: template)
+        let newText = ns.replacingCharacters(in: match.range, with: expanded)
+        let replacedRange = TextSelection(location: match.range.location, length: (expanded as NSString).length)
+        return (newText, replacedRange)
+    }
+
+    /// Replaces every match of `query` in `text`. In regex mode `replacement` is an ICU template
+    /// (`$1`, `$2` reference capture groups); in literal mode it is inserted verbatim. Returns the
+    /// text unchanged for an empty/invalid query.
+    public static func replaceAll(
+        in text: String,
+        query: String,
+        options: SearchOptions,
+        replacement: String
+    ) -> String {
+        guard let regex = makeRegex(query: query, options: options) else { return text }
+        let full = NSRange(location: 0, length: (text as NSString).length)
+        let template = options.isRegex ? replacement : NSRegularExpression.escapedTemplate(for: replacement)
+        return regex.stringByReplacingMatches(in: text, options: [], range: full, withTemplate: template)
+    }
+
     /// Filters note summaries to those whose title or body matches. Order is preserved, so a
     /// pre-sorted (modified-date) list stays sorted.
     public static func filter(_ summaries: [NoteSummary], query: String, options: SearchOptions) -> [NoteSummary] {

@@ -15,6 +15,12 @@ public final class EditorViewModel {
     public var selection: TextSelection
     public var style: StyleSheet
 
+    /// Monotonic counter the editor surface observes: each bump asks the `NSTextView` to become
+    /// first responder. Bumped when a note is created/opened so the caret is live and typing lands
+    /// immediately — without it a freshly created note could leave focus on the toolbar, so keys
+    /// only beeped.
+    public private(set) var focusRequest = 0
+
     private let engine = OutlineEngine()
     private var onChange: ((String) -> Void)?
 
@@ -31,6 +37,11 @@ public final class EditorViewModel {
 
     public func setOnChange(_ handler: ((String) -> Void)?) {
         onChange = handler
+    }
+
+    /// Asks the editor surface to take keyboard focus on the next update pass.
+    public func requestFocus() {
+        focusRequest += 1
     }
 
     /// Loads note content for display WITHOUT triggering `onChange`/save. Use this whenever the

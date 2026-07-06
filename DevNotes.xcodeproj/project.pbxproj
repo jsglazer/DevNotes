@@ -8,7 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		009A70C087CFC5D44DEC4A6C /* MarkdownTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71566D09682A6781E0210572 /* MarkdownTextView.swift */; };
+		07908FAAAF11A155D404FE53 /* LineNumberRulerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DCCA3F4FE6B3683D5FA00C4 /* LineNumberRulerView.swift */; };
 		0D7A5F0D39AA6A259897CAC3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1A860FB05EAB52091F7E732 /* Assets.xcassets */; };
+		102EBF363988D49D8C878F66 /* LineNumberRulerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DCCA3F4FE6B3683D5FA00C4 /* LineNumberRulerView.swift */; };
 		10E59DDA89053657AA718BC4 /* DevNotesCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9797B87FF1EB21760926BBF1 /* DevNotesCore */; };
 		147F709163E00B1D0A7C2770 /* KeymapStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A7BBDD437765DB3570F6214 /* KeymapStore.swift */; };
 		1BC0C488410987031B3A911C /* EditorTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FD955216D44C4AF61765C73 /* EditorTextView.swift */; };
@@ -20,10 +22,12 @@
 		3999A5AF8F3EA37B02A52A32 /* StyleApplier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 266C558014E2ED98542A0B55 /* StyleApplier.swift */; };
 		3A4D4B516AE77E8EB92786C7 /* Exporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE46C25B88AA794F2EC223B5 /* Exporter.swift */; };
 		3DB0DFA733FB3313B9B37AF5 /* FileNoteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A24629D5B796D7A3F7C5DCC1 /* FileNoteStore.swift */; };
+		4189445971E1A642500AAB1F /* FindState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E4F1346860E012E91CA6140 /* FindState.swift */; };
 		42A21882CDC652F4C7551BFF /* MergeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2F0B1922CE23BDBCA098662 /* MergeView.swift */; };
 		44E61C1935A81DAD293CF26D /* EditorPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = E34663D339352B81822546F8 /* EditorPane.swift */; };
 		49283FCC05EBB80EEFA1E97C /* FileNoteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A24629D5B796D7A3F7C5DCC1 /* FileNoteStore.swift */; };
 		4F7FA118EA4D5D74BF8A1A51 /* EditorToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03974BA7354B2EECDAEE9388 /* EditorToolbar.swift */; };
+		50A20C604A834175739DFA81 /* FindReplaceBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 026ABCD0755341D4E5870253 /* FindReplaceBar.swift */; };
 		53A1D1B351449AEA9F059851 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 966D8EE4084AE8B2A77F02E7 /* ContentView.swift */; };
 		54B34B0EB085B6FBD9E0D1E9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1A860FB05EAB52091F7E732 /* Assets.xcassets */; };
 		5BA5DF0D50244B5E12621C5E /* DevNotesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94A60EA2683E7A52725CD37D /* DevNotesApp.swift */; };
@@ -43,7 +47,9 @@
 		ADF79F5C4EE780C0FBE1F50E /* AppCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54443370DFE141913BD80CE1 /* AppCommands.swift */; };
 		AF234A3D36733DDF2559BF46 /* DirectoryWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19AC917B06781CF791567829 /* DirectoryWatcher.swift */; };
 		B185B25417465230ADD162E9 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78AFA6F523DB880932AA9022 /* SettingsView.swift */; };
+		B489CCD9376915E166296C00 /* FindReplaceBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 026ABCD0755341D4E5870253 /* FindReplaceBar.swift */; };
 		C3A02068ED29E1A780B31A51 /* DirectoryWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19AC917B06781CF791567829 /* DirectoryWatcher.swift */; };
+		C5CEE753953D7F396350F810 /* FindState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E4F1346860E012E91CA6140 /* FindState.swift */; };
 		CCD13E57E86E751EA519B6AE /* DevNotesCore in Frameworks */ = {isa = PBXBuildFile; productRef = 65B852DFA661A75457C78948 /* DevNotesCore */; };
 		D572009A6469620A88BCBF45 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EECFD32311AD536926457D89 /* AppModel.swift */; };
 		D666C440E8E5E8F56CC1EB3E /* EditorToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03974BA7354B2EECDAEE9388 /* EditorToolbar.swift */; };
@@ -58,13 +64,16 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		026ABCD0755341D4E5870253 /* FindReplaceBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindReplaceBar.swift; sourceTree = "<group>"; };
 		03974BA7354B2EECDAEE9388 /* EditorToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorToolbar.swift; sourceTree = "<group>"; };
 		07E21273C76AF127D488862A /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		19AC917B06781CF791567829 /* DirectoryWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectoryWatcher.swift; sourceTree = "<group>"; };
 		266C558014E2ED98542A0B55 /* StyleApplier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StyleApplier.swift; sourceTree = "<group>"; };
 		2C9CD00750279F380D3F8A1B /* DevNotes.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DevNotes.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3E4F1346860E012E91CA6140 /* FindState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindState.swift; sourceTree = "<group>"; };
 		45CBA42A05533BE57D164B37 /* Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Platform.swift; sourceTree = "<group>"; };
 		54443370DFE141913BD80CE1 /* AppCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCommands.swift; sourceTree = "<group>"; };
+		5DCCA3F4FE6B3683D5FA00C4 /* LineNumberRulerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineNumberRulerView.swift; sourceTree = "<group>"; };
 		71566D09682A6781E0210572 /* MarkdownTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownTextView.swift; sourceTree = "<group>"; };
 		78AFA6F523DB880932AA9022 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		7FD955216D44C4AF61765C73 /* EditorTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorTextView.swift; sourceTree = "<group>"; };
@@ -182,6 +191,7 @@
 				966D8EE4084AE8B2A77F02E7 /* ContentView.swift */,
 				E34663D339352B81822546F8 /* EditorPane.swift */,
 				03974BA7354B2EECDAEE9388 /* EditorToolbar.swift */,
+				026ABCD0755341D4E5870253 /* FindReplaceBar.swift */,
 				C2F0B1922CE23BDBCA098662 /* MergeView.swift */,
 				F7C40DA45CA4C483357AA0A0 /* SearchBarView.swift */,
 				78AFA6F523DB880932AA9022 /* SettingsView.swift */,
@@ -227,6 +237,8 @@
 			children = (
 				7FD955216D44C4AF61765C73 /* EditorTextView.swift */,
 				D9415E031840711DCEE435B1 /* EditorViewModel.swift */,
+				3E4F1346860E012E91CA6140 /* FindState.swift */,
+				5DCCA3F4FE6B3683D5FA00C4 /* LineNumberRulerView.swift */,
 				949B96DED5CC2D4B246D1DD0 /* MarkdownHighlighter.swift */,
 				71566D09682A6781E0210572 /* MarkdownTextView.swift */,
 				266C558014E2ED98542A0B55 /* StyleApplier.swift */,
@@ -355,7 +367,10 @@
 				A2591EC31933C83B75CEBA33 /* EditorViewModel.swift in Sources */,
 				76EC511C1A487046CD2F4C04 /* Exporter.swift in Sources */,
 				3DB0DFA733FB3313B9B37AF5 /* FileNoteStore.swift in Sources */,
+				50A20C604A834175739DFA81 /* FindReplaceBar.swift in Sources */,
+				C5CEE753953D7F396350F810 /* FindState.swift in Sources */,
 				147F709163E00B1D0A7C2770 /* KeymapStore.swift in Sources */,
+				102EBF363988D49D8C878F66 /* LineNumberRulerView.swift in Sources */,
 				D8306F8858AD7A297001A707 /* MarkdownHighlighter.swift in Sources */,
 				FF9CDA04A2BB550817D46576 /* MarkdownTextView.swift in Sources */,
 				42A21882CDC652F4C7551BFF /* MergeView.swift in Sources */,
@@ -384,7 +399,10 @@
 				A50F24B8372844599BFBF6CC /* EditorViewModel.swift in Sources */,
 				3A4D4B516AE77E8EB92786C7 /* Exporter.swift in Sources */,
 				49283FCC05EBB80EEFA1E97C /* FileNoteStore.swift in Sources */,
+				B489CCD9376915E166296C00 /* FindReplaceBar.swift in Sources */,
+				4189445971E1A642500AAB1F /* FindState.swift in Sources */,
 				9C7373A46907EB7081818ED1 /* KeymapStore.swift in Sources */,
+				07908FAAAF11A155D404FE53 /* LineNumberRulerView.swift in Sources */,
 				7B86C2358CB76E1ACE631E08 /* MarkdownHighlighter.swift in Sources */,
 				009A70C087CFC5D44DEC4A6C /* MarkdownTextView.swift in Sources */,
 				DFD1233F91122C755E3284E4 /* MergeView.swift in Sources */,
@@ -473,7 +491,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.9;
+				MARKETING_VERSION = 1.0.10;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -612,7 +630,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.9;
+				MARKETING_VERSION = 1.0.10;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

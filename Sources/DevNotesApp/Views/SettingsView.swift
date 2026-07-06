@@ -17,6 +17,23 @@ struct SettingsView: View {
     """
 
     var body: some View {
+        // Tabbed so each pane fits without the whole sheet needing to scroll — the tall "Editor
+        // Style" input and the long shortcut list each get their own scroll space, and the style
+        // input no longer grows past the pane (which used to steal focus while typing).
+        TabView {
+            generalTab
+                .tabItem { Label("General", systemImage: "gearshape") }
+            shortcutsTab
+                .tabItem { Label("Keyboard Shortcuts", systemImage: "keyboard") }
+            editorStyleTab
+                .tabItem { Label("Editor Style", systemImage: "paintbrush") }
+        }
+        #if os(macOS)
+        .frame(width: 500, height: 460)
+        #endif
+    }
+
+    private var generalTab: some View {
         Form {
             Section("Appearance") {
                 Picker("Theme", selection: $model.theme) {
@@ -43,7 +60,12 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        }
+        .formStyle(.grouped)
+    }
 
+    private var shortcutsTab: some View {
+        Form {
             Section("Keyboard Shortcuts") {
                 Text(
                     "Every bindable function and its current shortcut. Edit them in "
@@ -72,7 +94,12 @@ struct SettingsView: View {
                     }
                 }
             }
+        }
+        .formStyle(.grouped)
+    }
 
+    private var editorStyleTab: some View {
+        Form {
             Section("Editor Style") {
                 Text(
                     "Style the editor with one `token: value` per line. Only the tokens below are honoured "
@@ -88,9 +115,13 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
+                // Fixed height (scrolls internally): a growing TextEditor here used to push past the
+                // pane and drop first-responder mid-keystroke. A bounded box never re-lays-out the
+                // ancestor, so typing stays put.
                 TextEditor(text: $model.styleInput)
                     .font(.body.monospaced())
-                    .frame(minHeight: 120)
+                    .frame(height: 160)
+                    .scrollContentBackground(.hidden)
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
                             .strokeBorder(Color.secondary.opacity(0.4), lineWidth: 1)
@@ -133,7 +164,6 @@ struct SettingsView: View {
                 }
             }
         }
-        .padding()
-        .frame(minWidth: 420, minHeight: 360)
+        .formStyle(.grouped)
     }
 }
