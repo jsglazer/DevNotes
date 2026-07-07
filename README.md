@@ -2,7 +2,7 @@
 
 [![GitHub release](https://img.shields.io/github/v/release/jsglazer/DevNotes?logo=github)](https://github.com/jsglazer/DevNotes/releases) [![Swift 6.0](https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white)](https://swift.org) [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/jsglazer/DevNotes/blob/main/LICENSE) [![Made with Claude](https://img.shields.io/badge/Made_with-Claude-D97756?logo=anthropic)](https://claude.ai) [![Gemini Flash Antigravity](https://img.shields.io/badge/Gemini%20Flash-Antigravity-4f86f7?logo=google-gemini&logoColor=white)](https://github.com/google-gemini) [![CI](https://github.com/jsglazer/DevNotes/actions/workflows/ci.yml/badge.svg)](https://github.com/jsglazer/DevNotes/actions/workflows/ci.yml) [![CodeQL](https://github.com/jsglazer/DevNotes/actions/workflows/codeql.yml/badge.svg)](https://github.com/jsglazer/DevNotes/actions/workflows/codeql.yml) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/jsglazer/DevNotes/badge)](https://securityscorecards.dev/viewer/?uri=github.com/jsglazer/DevNotes)
 
-DevNotes is an ultra-fast, lightweight, offline-first Markdown editor for macOS and iOS visually inspired by the early Drafts app. It features a sleek dark color scheme with blue highlights, a collapsible file list, regex-supported search, outline editing tools, and real-time iCloud synchronization via CloudKit with visual conflict resolution.
+DevNotes is an ultra-fast, lightweight, offline-first Markdown editor for macOS and iOS visually inspired by the early Drafts app. It features a sleek dark color scheme with blue highlights, a collapsible file list, regex-supported search, an in-editor find & replace bar, outline editing tools, and real-time iCloud synchronization via CloudKit with visual conflict resolution.
 
 ## Features
 
@@ -19,7 +19,8 @@ DevNotes is an ultra-fast, lightweight, offline-first Markdown editor for macOS 
 - **Basic Spell Checking:** Continuous, in-line spell checking (red underlines) — on by default and toggleable from the **View** menu or **Settings**. It never rewrites your text: automatic correction, text substitutions, and grammar checking stay off so code and identifiers are left alone.
 - **Follows the Caret:** The editor auto-scrolls to keep the cursor in view, so text typed at the bottom of the window is never clipped.
 - **Export & Print:** From the **File** menu, export the open note as **Markdown** or **plain text**, or **Save as PDF** (rendered with your editor styling).
-- **Regex Search:** Advanced search supporting regular expressions, whole-word filtering, and case-sensitivity.
+- **Regex Search:** Advanced search over the note list supporting regular expressions, whole-word filtering, and case-sensitivity.
+- **In-Editor Find & Replace (macOS):** A Sublime-style find/replace bar over the open note — press **⌘F** to find or **⌘⌥F** to find and replace. It carries the same **regex**, **whole-word**, and **case-sensitive** toggles, walks matches with **⌘G / ⇧⌘G** (with a live "N of M" counter), highlights every match in the editor (the current one emphasized), and offers **Replace** and **Replace All** (regex mode expands `$1`-style capture-group references in the replacement).
 - **Outline Editing Tools:** Built-in actions to toggle bullets and numbered lists (with continuous auto-formatting), indent and outdent lines, increment/decrement headings, and move lines up or down.
 - **iPhone-Ready Editing:** A bold note-title bar above the toolbar, a dedicated key to dismiss the keyboard, and note-list/outline/settings sheets tuned for a phone-sized layout.
 - **iCloud CloudKit Sync:** Automatic background synchronization with offline storage support (degrades gracefully to local storage if iCloud is unavailable). A metadata-query monitor spots remote edits the moment iCloud learns about them and starts downloading immediately — no waiting for the system to materialize files on its own — and local edits are saved (and begin uploading) within 400ms of a typing pause.
@@ -35,7 +36,7 @@ DevNotes is an ultra-fast, lightweight, offline-first Markdown editor for macOS 
 1. **`DevNotesCore`:** A pure, platform-independent library containing all core domain logic. It has zero dependencies on AppKit, UIKit, SwiftUI, CloudKit, or file/network I/O, allowing for a fully deterministic and headless test suite.
    - **`Outline`:** Handles outline command applications (bullet/number toggling, indenting, moving lines, heading levels, and list continuations).
    - **`Diff` & `Merge`:** Implements Longest Common Subsequence (LCS) diffing, 3-way merge logic, and side-by-side/inline highlight generation.
-   - **`Search`:** Evaluates regex, case sensitivity, and whole-word matching logic.
+   - **`Search`:** Evaluates regex, case sensitivity, and whole-word matching logic, and performs single/all match replacement (with capture-group templating) for the in-editor find & replace.
    - **`Style`:** Parses and sanitizes custom stylesheet configurations against a strict blocklist/allowlist.
    - **`Keymap`:** Defines the closed catalog of bindable actions, parses/serializes key chords, and merges a user's `keymap.json` over the built-in defaults (with duplicate/parse warnings) — all pure and headless-tested.
    - **`Model` & `Repository`:** Handles entities like `Note` and `Conflict` along with the in-memory fake repositories for testing.
@@ -98,7 +99,7 @@ The **Editor Style** box in Settings lets you restyle the writing area without t
 
 **How to apply a style:**
 
-1. Open **DevNotes → Settings** (`Cmd-,`).
+1. Open **DevNotes → Settings** (`Cmd-,`) and select the **Editor Style** tab. (Settings is organized into three tabs — **General**, **Keyboard Shortcuts**, and **Editor Style** — so each pane fits without scrolling or clipping.)
 2. Type or paste declarations into the outlined **Editor Style** box, or click **Insert Example** to drop in a starter stylesheet.
 3. Changes apply live as you type. Any line DevNotes couldn't use is listed in orange with the reason (e.g. `unknown token`, `invalid value`), so you always know what was skipped.
 
