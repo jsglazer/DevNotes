@@ -25,6 +25,7 @@ struct EditorPane: View {
                     wrapText: model.wrapText,
                     showLineNumbers: model.showLineNumbers,
                     spellCheck: model.spellCheck,
+                    bottomPadding: model.bottomPadding,
                     searchMatches: model.find.isPresented ? model.find.matches : [],
                     currentMatch: model.find.isPresented ? model.find.currentMatch : nil,
                     focusRequest: model.editor.focusRequest,

@@ -13,6 +13,9 @@ struct MarkdownTextView: View {
     var wrapText: Bool = true
     var showLineNumbers: Bool = false
     var spellCheck: Bool = true
+    /// Extra scrollable space kept below the last line (points), so the caret never sits against
+    /// the bottom edge and the final lines can scroll up into view.
+    var bottomPadding: Double = 0
     /// Find/Replace overlay: every match range (highlighted faintly) and the current one
     /// (highlighted strongly). macOS only; empty/nil elsewhere.
     var searchMatches: [DevNotesCore.TextSelection] = []
@@ -31,6 +34,7 @@ struct MarkdownTextView: View {
             wrapText: wrapText,
             showLineNumbers: showLineNumbers,
             spellCheck: spellCheck,
+            bottomPadding: bottomPadding,
             searchMatches: searchMatches,
             currentMatch: currentMatch,
             focusRequest: focusRequest,
@@ -49,6 +53,7 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
     var wrapText: Bool
     var showLineNumbers: Bool
     var spellCheck: Bool
+    var bottomPadding: Double
     var searchMatches: [DevNotesCore.TextSelection]
     var currentMatch: DevNotesCore.TextSelection?
     var focusRequest: Int
@@ -79,6 +84,9 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
+        // A bottom content inset is scroll-past-end room: the caret on the last line no longer sits
+        // flush against the window edge, and the final lines can scroll up into view.
+        scrollView.automaticallyAdjustsContentInsets = false
 
         // Line-number gutter (drawn on demand; visibility toggled in updateNSView).
         let ruler = LineNumberRulerView(textView: textView, scrollView: scrollView)
@@ -98,12 +106,17 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         context.coordinator.parent = self
         textView.onKeyChord = onKeyChord
 
+        let bottomInset = CGFloat(max(0, bottomPadding))
+        if scrollView.contentInsets.bottom != bottomInset {
+            scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
+        }
+
         if textView.string != text {
             textView.string = text
             // Resetting the string wipes attribute runs — re-colour is mandatory.
             context.coordinator.invalidateHighlight()
         }
-        applyWrapping(to: textView, in: scrollView)
+        applyWrapping(to: textView, in: scrollView, coordinator: context.coordinator)
 
         if textView.isContinuousSpellCheckingEnabled != spellCheck {
             textView.isContinuousSpellCheckingEnabled = spellCheck
@@ -119,7 +132,11 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         // this guard every keystroke paid for the full syntax pass twice.
         if context.coordinator.needsHighlight(text: textView.string, style: style),
            let storage = textView.textStorage {
-            MarkdownHighlighter(style: style).apply(to: storage)
+            // Re-colouring re-lays the TextKit 2 viewport, which can shake the scroll position;
+            // pin it so a background re-highlight never makes the screen jump under the reader.
+            context.coordinator.preservingScroll(of: scrollView) {
+                MarkdownHighlighter(style: style).apply(to: storage)
+            }
             context.coordinator.didHighlight(text: textView.string, style: style)
         }
         context.coordinator.applySearchHighlight(matches: searchMatches, current: currentMatch)
@@ -146,12 +163,16 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         context.coordinator.ruler?.needsDisplay = true
     }
 
-    /// Configures soft-wrap vs. horizontal-scroll on the text container.
-    private func applyWrapping(to textView: NSTextView, in scrollView: NSScrollView) {
+    /// Configures soft-wrap vs. horizontal-scroll on the text container. Idempotent: skips the work
+    /// when the mode and width already match what was last applied — re-setting the container size
+    /// every observable update (each keystroke, each autosave refresh) forced a relayout that
+    /// jostled the scroll position.
+    private func applyWrapping(to textView: NSTextView, in scrollView: NSScrollView, coordinator: Coordinator) {
         guard let container = textView.textContainer else { return }
+        let width = scrollView.contentSize.width
+        if coordinator.wrappingUnchanged(wrapText: wrapText, width: width) { return }
         if wrapText {
             container.widthTracksTextView = true
-            let width = scrollView.contentSize.width
             container.size = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
             textView.isHorizontallyResizable = false
             textView.autoresizingMask = [.width]
@@ -185,8 +206,34 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         /// were actually applied (never on the ordinary typing path with the bar closed).
         private var hasSearchHighlight = false
 
+        /// Last wrap mode + width applied to the container, so `applyWrapping` can skip redundant
+        /// (relayout-inducing) reconfiguration on every observable update.
+        private var appliedWrapText: Bool?
+        private var appliedWrapWidth: CGFloat?
+
         func needsHighlight(text: String, style: StyleSheet) -> Bool {
             highlightedText != text || highlightedStyle != style
+        }
+
+        /// True when the wrap mode + width already match the last-applied configuration (and records
+        /// the requested values so the first call for a given mode/width always applies).
+        func wrappingUnchanged(wrapText: Bool, width: CGFloat) -> Bool {
+            let unchanged = appliedWrapText == wrapText && appliedWrapWidth == width
+            appliedWrapText = wrapText
+            appliedWrapWidth = width
+            return unchanged
+        }
+
+        /// Runs `work` (which re-applies attributes and can shake the TextKit 2 viewport) while
+        /// pinning the clip view's scroll origin, so a re-colour never makes the screen jump.
+        @MainActor
+        func preservingScroll(of scrollView: NSScrollView, _ work: () -> Void) {
+            let origin = scrollView.contentView.bounds.origin
+            work()
+            if scrollView.contentView.bounds.origin != origin {
+                scrollView.contentView.setBoundsOrigin(origin)
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            }
         }
 
         /// True when the model bumped the focus token since the last pass (records the new value).
@@ -284,7 +331,16 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             let range = textView.selectedRange()
             parent.selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
             if let storage = textView.textStorage {
-                MarkdownHighlighter(style: parent.style).apply(to: storage)
+                // Pin the scroll position across the full-document re-colour, then follow the caret
+                // ourselves — so re-colouring never jumps the view, but typing at the bottom still
+                // keeps the caret on-screen.
+                if let scrollView = textView.enclosingScrollView {
+                    preservingScroll(of: scrollView) {
+                        MarkdownHighlighter(style: parent.style).apply(to: storage)
+                    }
+                } else {
+                    MarkdownHighlighter(style: parent.style).apply(to: storage)
+                }
                 didHighlight(text: textView.string, style: parent.style)
             }
             // Follow the caret as the user types so text added at the bottom isn't clipped.
@@ -310,6 +366,7 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
     var wrapText: Bool
     var showLineNumbers: Bool
     var spellCheck: Bool
+    var bottomPadding: Double
     /// Accepted for signature parity with macOS; the Find bar is macOS-only, so iOS ignores these.
     var searchMatches: [DevNotesCore.TextSelection]
     var currentMatch: DevNotesCore.TextSelection?
@@ -340,6 +397,11 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         if textView.spellCheckingType != desiredSpellCheck {
             textView.spellCheckingType = desiredSpellCheck
         }
+        // Scroll-past-end room so the caret on the last line clears the keyboard/bottom edge.
+        let bottomInset = CGFloat(max(0, bottomPadding))
+        if textView.contentInset.bottom != bottomInset {
+            textView.contentInset.bottom = bottomInset
+        }
         if textView.text != text {
             textView.text = text
             // Resetting the string wipes attribute runs — re-colour is mandatory.
@@ -365,7 +427,7 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         if container.showLineNumbers != showLineNumbers {
             container.showLineNumbers = showLineNumbers
         }
-        container.gutter.setNeedsDisplay()
+        container.refreshOverlays()
     }
 
     final class Coordinator: NSObject, UITextViewDelegate {
@@ -417,7 +479,7 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
             textView.selectedRange = NSRange(location: edit.selection.location, length: edit.selection.length)
             parent.text = edit.text
             parent.selection = edit.selection
-            container?.gutter.setNeedsDisplay()
+            container?.refreshOverlays()
             return false
         }
 
@@ -427,7 +489,7 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
             didHighlight(text: textView.text, style: parent.style)
             let range = textView.selectedRange
             parent.selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
-            container?.gutter.setNeedsDisplay()
+            container?.refreshOverlays()
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
@@ -436,7 +498,7 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
-            container?.gutter.setNeedsDisplay()
+            container?.refreshOverlays()
         }
     }
 }
@@ -447,6 +509,8 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
 final class EditorContainerView: UIView {
     let textView: UITextView
     let gutter: IOSLineNumberGutter
+    /// Non-interactive overlay that draws a real horizontal line over every `---` thematic break.
+    let ruleOverlay: IOSThematicBreakOverlay
     private let gutterWidth: CGFloat = 40
 
     var showLineNumbers = false {
@@ -462,8 +526,10 @@ final class EditorContainerView: UIView {
     init(textView: UITextView) {
         self.textView = textView
         self.gutter = IOSLineNumberGutter(textView: textView)
+        self.ruleOverlay = IOSThematicBreakOverlay(textView: textView)
         super.init(frame: .zero)
         addSubview(textView)
+        addSubview(ruleOverlay)
         addSubview(gutter)
         gutter.isHidden = true
     }
@@ -471,11 +537,72 @@ final class EditorContainerView: UIView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    /// Redraws the overlays that track the text view's live layout/scroll (rules, line numbers).
+    func refreshOverlays() {
+        gutter.setNeedsDisplay()
+        ruleOverlay.setNeedsDisplay()
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         textView.frame = bounds
+        ruleOverlay.frame = bounds
         gutter.frame = CGRect(x: 0, y: 0, width: gutterWidth, height: bounds.height)
-        gutter.setNeedsDisplay()
+        refreshOverlays()
+    }
+}
+
+/// Draws a real full-width horizontal line across each Markdown thematic-break line (`---`, `***`,
+/// `___`), tracking the text view's layout + scroll offset like the line-number gutter does. The
+/// dashes stay editable underneath (dimmed by `MarkdownHighlighter`); this just paints the rule.
+final class IOSThematicBreakOverlay: UIView {
+    private weak var textView: UITextView?
+
+    init(textView: UITextView) {
+        self.textView = textView
+        super.init(frame: .zero)
+        backgroundColor = .clear
+        isUserInteractionEnabled = false
+        contentMode = .redraw
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func draw(_ rect: CGRect) {
+        guard let textView,
+              let layoutManager = textView.textLayoutManager,
+              let contentManager = layoutManager.textContentManager
+        else { return }
+
+        let ns = textView.text as NSString
+        guard ns.length > 0 else { return }
+        let insetTop = textView.textContainerInset.top
+        let offsetY = textView.contentOffset.y
+        let leftInset = textView.textContainerInset.left
+        let rightInset = textView.textContainerInset.right
+        let documentStart = contentManager.documentRange.location
+
+        UIColor.separator.setStroke()
+        layoutManager.enumerateTextLayoutFragments(from: documentStart, options: [.ensuresLayout]) { fragment in
+            let frame = fragment.layoutFragmentFrame
+            let y = frame.midY + insetTop - offsetY
+            guard y >= rect.minY - 1, y <= rect.maxY + 1 else { return true }
+
+            let offset = contentManager.offset(from: documentStart, to: fragment.rangeInElement.location)
+            guard offset <= ns.length else { return true }
+            let lineRange = ns.lineRange(for: NSRange(location: offset, length: 0))
+            let line = ns.substring(with: lineRange).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard DevNotesCore.Markdown.isThematicBreak(line) else { return true }
+
+            let path = UIBezierPath()
+            path.lineWidth = 1
+            let pixelY = (y * UIScreen.main.scale).rounded() / UIScreen.main.scale
+            path.move(to: CGPoint(x: leftInset, y: pixelY))
+            path.addLine(to: CGPoint(x: bounds.width - rightInset, y: pixelY))
+            path.stroke()
+            return true
+        }
     }
 }
 

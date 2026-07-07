@@ -53,6 +53,7 @@ struct MarkdownHighlighter {
     private static let bulletPattern = compile(#"^[ \t]*([-*+])[ \t]"#, options: [.anchorsMatchLines])
     private static let numberedPattern = compile(#"^[ \t]*(\d+\.)[ \t]"#, options: [.anchorsMatchLines])
     private static let quotePattern = compile(#"^[ \t]*(>)"#, options: [.anchorsMatchLines])
+    private static let thematicBreakPattern = compile(#"^[ \t]{0,3}([-*_])([ \t]*\1){2,}[ \t]*$"#, options: [.anchorsMatchLines])
     private static let codePattern = compile(#"`[^`\n]+`"#)
     private static let boldPattern = compile(#"(\*\*|__)(?=\S)(.+?)(?<=\S)\1"#)
     private static let italicPattern = compile(#"(?<![\*_])([*_])(?=\S)([^*_\n]+?)(?<=\S)\1(?![\*_])"#)
@@ -104,6 +105,11 @@ struct MarkdownHighlighter {
         // Blockquote marker.
         applyRegex(Self.quotePattern, in: ns, storage: storage) { match in
             storage.addAttribute(.foregroundColor, value: Self.quoteColor, range: match.range(at: 1))
+        }
+        // Thematic break (`---`, `***`, `___`) — dim the whole line so the real rule drawn over it
+        // (macOS) reads cleanly, and iOS still gets a distinct divider colour.
+        applyRegex(Self.thematicBreakPattern, in: ns, storage: storage) { match in
+            storage.addAttribute(.foregroundColor, value: Self.quoteColor, range: match.range)
         }
 
         // --- Inline spans ---

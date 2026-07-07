@@ -16,6 +16,14 @@ struct SettingsView: View {
     heading-color: #3b82f6
     """
 
+    /// Live sample of the current date format, so the user sees what ⌃⌥D will insert.
+    private var dateTimePreview: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = model.dateFormat
+        return formatter.string(from: Date())
+    }
+
     var body: some View {
         // Tabbed so each pane fits without the whole sheet needing to scroll — the tall "Editor
         // Style" input and the long shortcut list each get their own scroll space, and the style
@@ -48,6 +56,33 @@ struct SettingsView: View {
                 Toggle("Wrap text", isOn: $model.wrapText)
                 Toggle("Show line numbers", isOn: $model.showLineNumbers)
                 Toggle("Check spelling while typing", isOn: $model.spellCheck)
+
+                Stepper(
+                    "Bottom padding: \(Int(model.bottomPadding)) pt",
+                    value: $model.bottomPadding,
+                    in: 0 ... 600,
+                    step: 20
+                )
+                Text("Blank space kept below the last line so the caret never sits against the window's bottom edge.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section("Insert Date & Time") {
+                TextField("Format", text: $model.dateFormat)
+                    .font(.body.monospaced())
+                    #if os(iOS)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    #endif
+                Text("Preview: \(dateTimePreview)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Inserted at the caret by the Insert Date & Time shortcut. Uses DateFormatter patterns (yyyy=year, MM=month, dd=day, HH=hour, mm=minute, ss=second).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("On Open") {

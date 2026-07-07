@@ -94,6 +94,34 @@ struct OutlineEngineTests {
         #expect(outdented.text == "abc")
     }
 
+    @Test("Caret indent carries the bullet's nested children")
+    func indentCaretCarriesChildren() {
+        // Caret on the parent "- a"; "\t- b" and "\t- c" are deeper, so they move too.
+        let result = engine.indent(text: "- a\n\t- b\n\t- c", selection: .caret(0))
+        #expect(result.text == "\t- a\n\t\t- b\n\t\t- c")
+        #expect(result.selection == .caret(1))
+    }
+
+    @Test("Caret indent stops at a sibling at the same depth")
+    func indentCaretStopsAtSibling() {
+        // Only the parent and its one child move; the second top-level bullet stays put.
+        let result = engine.indent(text: "- a\n\t- b\n- c", selection: .caret(1))
+        #expect(result.text == "\t- a\n\t\t- b\n- c")
+        #expect(result.selection == .caret(2))
+    }
+
+    @Test("Caret indent stops at a blank line separating list blocks")
+    func indentCaretStopsAtBlankLine() {
+        let result = engine.indent(text: "- a\n\n\t- b", selection: .caret(0))
+        #expect(result.text == "\t- a\n\n\t- b")
+    }
+
+    @Test("Caret indent with no children still indents just the one line")
+    func indentCaretNoChildren() {
+        let result = engine.indent(text: "- a\n- b", selection: .caret(0))
+        #expect(result.text == "\t- a\n- b")
+    }
+
     // MARK: Move lines
 
     @Test("Move line up swaps with the line above and carries the caret")

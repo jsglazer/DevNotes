@@ -12,6 +12,12 @@ enum LinePrefix {
         return (String(line[line.startIndex ..< indentEnd]), String(line[indentEnd...]))
     }
 
+    /// Depth of a line's leading indentation, counted in whitespace characters (each tab or space
+    /// counts as one). Used to decide which following lines are a bullet's nested descendants.
+    static func indentDepth(_ line: String) -> Int {
+        splitIndent(line).indent.count
+    }
+
     /// Length (in Characters) of a bullet marker at the start of `rest` — a `-`, `*` or `+`
     /// followed by exactly one space (e.g. `"- "`). `nil` if `rest` is not a bullet item.
     static func bulletMarkerLength(_ rest: String) -> Int? {

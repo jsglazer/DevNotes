@@ -89,12 +89,43 @@ public struct OutlineEngine: Sendable {
     /// Inserts one indentation level at the start of each touched line. Empty lines are left
     /// untouched for range selections (so a block indent leaves no trailing-whitespace lines),
     /// but a caret on an empty line still indents so the user can indent-then-type.
+    ///
+    /// A **caret** indent also carries the line's nested descendants: the immediately following
+    /// lines that are indented deeper than the caret's line move with it, so indenting a bullet
+    /// shifts its whole sub-list rather than orphaning the children a level to the left.
     public func indent(text: String, selection: TextSelection) -> TextEdit {
-        let isCaret = selection.isCaret
-        return applyPrefixOp(text: text, selection: selection) { _, line in
-            if !isCaret, line.isEmpty { return (line, 0) }
-            return (indentUnit + line, TextModel.utf16Length(indentUnit))
+        guard selection.isCaret else {
+            return applyPrefixOp(text: text, selection: selection) { _, line in
+                if line.isEmpty { return (line, 0) }
+                return (indentUnit + line, TextModel.utf16Length(indentUnit))
+            }
         }
+        return indentSubtree(text: text, selection: selection)
+    }
+
+    /// Indents the caret's line plus its nested descendants (the run of following lines indented
+    /// deeper than it, stopping at the first blank line or line at/above its indent depth). The
+    /// caret shifts by the indent inserted on its own line.
+    private func indentSubtree(text: String, selection: TextSelection) -> TextEdit {
+        let model = TextModel(text)
+        let caretLine = model.lineIndex(ofOffset: selection.location)
+        let parentDepth = LinePrefix.indentDepth(model.lines[caretLine])
+        var last = caretLine
+        var index = caretLine + 1
+        while index < model.lines.count {
+            let line = model.lines[index]
+            if line.isEmpty || LinePrefix.indentDepth(line) <= parentDepth { break }
+            last = index
+            index += 1
+        }
+        var newLines = model.lines
+        for i in caretLine ... last {
+            newLines[i] = indentUnit + newLines[i]
+        }
+        let newModel = TextModel(lines: newLines)
+        let column = selection.location - model.lineStart(caretLine)
+        let newLocation = newModel.lineStart(caretLine) + column + TextModel.utf16Length(indentUnit)
+        return TextEdit(text: newModel.text, selection: .caret(newLocation))
     }
 
     /// Removes one indentation level from the start of each touched line: a leading tab, or up

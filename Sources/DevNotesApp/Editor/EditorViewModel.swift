@@ -54,6 +54,15 @@ public final class EditorViewModel {
         isLoadingContent = false
     }
 
+    /// Replaces the current selection (or inserts at the caret) with `string`, leaving the caret
+    /// just after the inserted text. Routes through `text`, so it schedules a save like any edit.
+    public func insert(_ string: String) {
+        let ns = text as NSString
+        let range = NSRange(location: selection.location, length: selection.length)
+        text = ns.replacingCharacters(in: range, with: string)
+        selection = .caret(selection.location + (string as NSString).length)
+    }
+
     /// Runs a parameterless outline command (bullet, indent, move-line, Enter, …).
     public func run(_ command: OutlineCommand) {
         apply(engine.apply(command, text: text, selection: selection))

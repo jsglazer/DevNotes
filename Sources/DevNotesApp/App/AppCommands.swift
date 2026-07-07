@@ -29,6 +29,9 @@ struct AppCommands: Commands {
             Divider()
             menuButton("Move Line Up", .moveLineUp)
             menuButton("Move Line Down", .moveLineDown)
+            Divider()
+            menuButton("Insert Date & Time", .insertDateTime)
+                .disabled(model.selectedID == nil)
         }
 
         // Find/Replace over the open note. Standard macOS shortcuts (⌘F / ⌘⌥F / ⌘G / ⇧⌘G).

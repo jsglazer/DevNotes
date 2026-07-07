@@ -17,6 +17,48 @@ final class EditorTextView: NSTextView {
         }
         super.keyDown(with: event)
     }
+
+    /// After the text draws, stroke a real full-width horizontal line across every Markdown
+    /// thematic-break line (`---`, `***`, `___`), so a rule *looks* like a rule while its
+    /// characters stay editable. The dashes themselves are dimmed by `MarkdownHighlighter`.
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        drawThematicBreaks(in: dirtyRect)
+    }
+
+    private func drawThematicBreaks(in dirtyRect: NSRect) {
+        guard let layoutManager = textLayoutManager,
+              let contentManager = layoutManager.textContentManager else { return }
+
+        let ns = string as NSString
+        guard ns.length > 0 else { return }
+        let origin = textContainerOrigin
+        let leftInset = textContainerInset.width
+        let documentStart = contentManager.documentRange.location
+
+        NSColor.separatorColor.setStroke()
+        layoutManager.enumerateTextLayoutFragments(from: documentStart, options: [.ensuresLayout]) { fragment in
+            let frame = fragment.layoutFragmentFrame
+            let y = frame.midY + origin.y
+            // Cheap vertical cull: skip fragments outside the region being redrawn.
+            guard y >= dirtyRect.minY - 1, y <= dirtyRect.maxY + 1 else {
+                return frame.maxY + origin.y < dirtyRect.minY || frame.minY + origin.y <= dirtyRect.maxY
+            }
+            let offset = contentManager.offset(from: documentStart, to: fragment.rangeInElement.location)
+            guard offset <= ns.length else { return true }
+            let lineRange = ns.lineRange(for: NSRange(location: offset, length: 0))
+            let line = ns.substring(with: lineRange)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard DevNotesCore.Markdown.isThematicBreak(line) else { return true }
+
+            let path = NSBezierPath()
+            path.lineWidth = 1
+            path.move(to: NSPoint(x: leftInset, y: y.rounded() + 0.5))
+            path.line(to: NSPoint(x: bounds.width - leftInset, y: y.rounded() + 0.5))
+            path.stroke()
+            return true
+        }
+    }
 }
 
 extension DevNotesCore.KeyChord {

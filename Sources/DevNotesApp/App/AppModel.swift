@@ -33,6 +33,8 @@ private enum PreferenceKey {
     static let showLineNumbers = "devnotes.showLineNumbers"
     static let spellCheck = "devnotes.spellCheck"
     static let pinned = "devnotes.pinnedIDs"
+    static let dateFormat = "devnotes.dateFormat"
+    static let bottomPadding = "devnotes.bottomPadding"
 }
 
 /// The composition root and app-wide state. It owns the injected `NoteRepository` and
@@ -75,6 +77,14 @@ public final class AppModel {
     /// Continuous spell checking (red squiggles) in the editor. Defaults ON; toggled from the View
     /// menu and Settings. A basic checker only — no autocorrect/substitutions are enabled.
     public var spellCheck = true { didSet { defaults.set(spellCheck, forKey: PreferenceKey.spellCheck) } }
+
+    /// `DateFormatter` pattern used by the Insert Date & Time action (⌃⌥D). Default produces e.g.
+    /// `20260707-143022`. Any Unicode date pattern the user types in Settings is honoured verbatim.
+    public var dateFormat = "yyyyMMdd-HHmmss" { didSet { defaults.set(dateFormat, forKey: PreferenceKey.dateFormat) } }
+
+    /// Extra empty space below the last line of the editor (points), so the caret can sit clear of
+    /// the window's bottom edge and the last lines are scrollable up into view. Configured in Settings.
+    public var bottomPadding: Double = 120 { didSet { defaults.set(bottomPadding, forKey: PreferenceKey.bottomPadding) } }
 
     /// User-configurable keyboard shortcuts, loaded once at launch from `~/.config/devnotes/keymap.json`
     /// (seeded with the defaults on first run). The View menu, editor key handling, and the Settings
@@ -144,6 +154,12 @@ public final class AppModel {
         // Spell check defaults ON, so only override when the user has explicitly stored a value.
         if defaults.object(forKey: PreferenceKey.spellCheck) != nil {
             spellCheck = defaults.bool(forKey: PreferenceKey.spellCheck)
+        }
+        if let raw = defaults.string(forKey: PreferenceKey.dateFormat), raw.isEmpty == false {
+            dateFormat = raw
+        }
+        if defaults.object(forKey: PreferenceKey.bottomPadding) != nil {
+            bottomPadding = defaults.double(forKey: PreferenceKey.bottomPadding)
         }
         pinnedIDs = Set(defaults.stringArray(forKey: PreferenceKey.pinned) ?? [])
     }
@@ -304,8 +320,17 @@ public final class AppModel {
         case .showLineNumbers: showLineNumbers.toggle()
         case .nextNote: Task { await selectNext() }
         case .previousNote: Task { await selectPrevious() }
+        case .insertDateTime: insertDateTime()
         }
         return true
+    }
+
+    /// Inserts the current date/time at the caret, formatted with the user's `dateFormat`.
+    public func insertDateTime() {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = dateFormat
+        editor.insert(formatter.string(from: Date()))
     }
 
     public func newNote() async {
