@@ -24,8 +24,12 @@ final class LineNumberRulerView: NSRulerView {
               let contentManager = layoutManager.textContentManager
         else { return }
 
-        // Gutter background + trailing separator.
-        NSColor.textBackgroundColor.withAlphaComponent(0.4).setFill()
+        // Gutter background + trailing separator. Painted OPAQUE (the editor background plus a faint
+        // tint) so the gutter reads as a distinct strip without the old translucent fill, which let
+        // the window background show through and made the whole editor look dimmed.
+        NSColor.textBackgroundColor.setFill()
+        rect.fill()
+        NSColor.gray.withAlphaComponent(0.08).setFill()
         rect.fill()
         NSColor.separatorColor.setStroke()
         let separator = NSBezierPath()

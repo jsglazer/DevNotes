@@ -87,12 +87,20 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
         textView.isGrammarCheckingEnabled = false
+        // The text view must NOT paint its own (opaque) background: it draws right over the
+        // current-line band `draw(_:)` lays down first, which was why the highlight never appeared.
+        // The scroll view supplies the editor background instead, so the band shows behind the text.
+        textView.drawsBackground = false
         context.coordinator.textView = textView
 
         let scrollView = NSScrollView()
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
-        scrollView.drawsBackground = false
+        // Draw a solid editor background across the whole scroll area (text + ruler strip + corner),
+        // so turning the line-number gutter on can't let a translucent/grey control background bleed
+        // through and make the editor look dimmed.
+        scrollView.drawsBackground = true
+        scrollView.backgroundColor = .textBackgroundColor
         // A bottom content inset is scroll-past-end room: the caret on the last line no longer sits
         // flush against the window edge, and the final lines can scroll up into view.
         scrollView.automaticallyAdjustsContentInsets = false
@@ -430,6 +438,21 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         textView.spellCheckingType = spellCheck ? .yes : .no
         textView.textContainerInset = UIEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
         textView.backgroundColor = .clear
+        // Keyboard-dismiss button pinned above the keyboard. A SwiftUI `.toolbar(placement:.keyboard)`
+        // never attaches to this UIKit text view, so the button was missing; an inputAccessoryView is
+        // the reliable way to give the editor a "hide keyboard" affordance on iOS.
+        let accessory = UIToolbar()
+        accessory.sizeToFit()
+        accessory.items = [
+            UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil),
+            UIBarButtonItem(
+                image: UIImage(systemName: "keyboard.chevron.compact.down"),
+                style: .plain,
+                target: textView,
+                action: #selector(UIResponder.resignFirstResponder)
+            )
+        ]
+        textView.inputAccessoryView = accessory
         let container = EditorContainerView(textView: textView)
         context.coordinator.container = container
         return container
@@ -576,8 +599,16 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
                 container?.refreshOverlays()
                 return
             }
+            // Re-colouring rewrites every attribute run, which re-lays the TextKit 2 viewport and can
+            // shove the scroll position once the note is taller than the screen — the "screen jumps /
+            // goes blank while typing past ~25 lines" report. Pin the scroll offset across the pass so
+            // typing never moves the view out from under the caret.
+            let offset = textView.contentOffset
             MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: textView.textStorage)
             didHighlight(text: textView.text, style: parent.style)
+            if textView.contentOffset != offset {
+                textView.setContentOffset(offset, animated: false)
+            }
             container?.refreshOverlays()
         }
 
@@ -738,7 +769,10 @@ final class IOSThematicBreakOverlay: UIView {
         let rightInset = textView.textContainerInset.right
         let documentStart = contentManager.documentRange.location
 
-        UIColor.separator.setStroke()
+        // A 1-pt `.separator` hairline was effectively invisible, so `---` looked like it produced no
+        // rule. Draw a clearly visible mid-grey line instead, snapped to the device pixel grid.
+        let scale = traitCollection.displayScale > 0 ? traitCollection.displayScale : 2
+        UIColor.secondaryLabel.setStroke()
         layoutManager.enumerateTextLayoutFragments(from: documentStart, options: [.ensuresLayout]) { fragment in
             let frame = fragment.layoutFragmentFrame
             let y = frame.midY + insetTop - offsetY
@@ -751,8 +785,8 @@ final class IOSThematicBreakOverlay: UIView {
             guard DevNotesCore.Markdown.isThematicBreak(line) else { return true }
 
             let path = UIBezierPath()
-            path.lineWidth = 1
-            let pixelY = (y * UIScreen.main.scale).rounded() / UIScreen.main.scale
+            path.lineWidth = 1.5
+            let pixelY = (y * scale).rounded() / scale
             path.move(to: CGPoint(x: leftInset, y: pixelY))
             path.addLine(to: CGPoint(x: bounds.width - rightInset, y: pixelY))
             path.stroke()

@@ -6,15 +6,15 @@ import SwiftUI
 struct SidebarView: View {
     @Bindable var model: AppModel
 
-    /// Base file-name point size (one point larger than the previous `.body`), scaled by the app
-    /// zoom. Platform bodies differ, so the baseline does too.
+    /// Base file-name point size (one point larger than the previous `.body`). Fixed — the ⌘+/⌘-
+    /// zoom scales only the editor content area, never this file list. Platform bodies differ, so
+    /// the baseline does too.
     private var titleFontSize: CGFloat {
         #if os(macOS)
-        let base: CGFloat = 14
+        return 14
         #else
-        let base: CGFloat = 18
+        return 18
         #endif
-        return base * CGFloat(model.zoom)
     }
 
     var body: some View {

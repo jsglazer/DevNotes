@@ -73,7 +73,9 @@ final class EditorTextView: NSTextView {
         let leftInset = textContainerInset.width
         let documentStart = contentManager.documentRange.location
 
-        NSColor.separatorColor.setStroke()
+        // A 1-pt `separatorColor` hairline was effectively invisible against the editor background,
+        // so `---` looked like it produced no rule. Draw a clearly visible mid-grey line instead.
+        NSColor.secondaryLabelColor.setStroke()
         layoutManager.enumerateTextLayoutFragments(from: documentStart, options: [.ensuresLayout]) { fragment in
             let frame = fragment.layoutFragmentFrame
             let y = frame.midY + origin.y
@@ -88,7 +90,7 @@ final class EditorTextView: NSTextView {
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                     if DevNotesCore.Markdown.isThematicBreak(line) {
                         let path = NSBezierPath()
-                        path.lineWidth = 1
+                        path.lineWidth = 1.5
                         path.move(to: NSPoint(x: leftInset, y: y.rounded() + 0.5))
                         path.line(to: NSPoint(x: bounds.width - leftInset, y: y.rounded() + 0.5))
                         path.stroke()

@@ -72,7 +72,7 @@ struct SettingsView: View {
                     in: 0.6 ... 3.0,
                     step: 0.1
                 )
-                Text("Scales the note text and the file-list text. On Mac you can also use ⌘+, ⌘-, and ⌘0.")
+                Text("Scales the editor content area only (the note text), not the file list. On Mac you can also use ⌘+, ⌘-, and ⌘0.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -126,6 +126,17 @@ struct SettingsView: View {
                 Text("Where the caret lands when you open a note.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                Picker("Open on launch", selection: $model.openOnLaunchID) {
+                    Text("Top of the list").tag("")
+                    ForEach(model.summaries) { summary in
+                        Text(summary.title).tag(summary.id.rawValue)
+                    }
+                }
+                Text("The note DevNotes opens automatically when it launches. Falls back to the top of the list if that note is deleted.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .formStyle(.grouped)

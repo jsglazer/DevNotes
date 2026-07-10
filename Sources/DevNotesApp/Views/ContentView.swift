@@ -8,12 +8,24 @@ import SwiftUI
 ///   collapse behaviour doesn't give a usable phone layout for this app.
 struct ContentView: View {
     @Bindable var model: AppModel
+    /// Re-pull cross-device pins whenever the app becomes active — the live iCloud change
+    /// notification only arrives while running, so a pin set on another device while this one was
+    /// backgrounded/closed is picked up here.
+    @Environment(\.scenePhase) private var scenePhase
     #if os(iOS)
     @State private var isNotesListPresented = false
     @State private var isSettingsPresented = false
     #endif
 
     var body: some View {
+        content
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { model.refreshPinsFromCloud() }
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         #if os(macOS)
         macBody
         #else
@@ -83,19 +95,9 @@ struct ContentView: View {
                 }
                 .background(.bar)
             }
-            .toolbar {
-                // A key at the bottom-right of the keyboard accessory bar to dismiss the keyboard.
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button {
-                        UIApplication.shared.sendAction(
-                            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
-                        )
-                    } label: {
-                        Image(systemName: "keyboard.chevron.compact.down")
-                    }
-                }
-            }
+            // The keyboard-dismiss button lives on the editor's UIKit `inputAccessoryView`
+            // (see MarkdownTextView); a SwiftUI `.toolbar(placement: .keyboard)` never attached to
+            // the UITextView, so it was invisible.
             .sheet(isPresented: $isNotesListPresented) {
                 NavigationStack {
                     SidebarView(model: model)

@@ -29,6 +29,7 @@ private enum PreferenceKey {
     static let theme = "devnotes.theme"
     static let styleInput = "devnotes.styleInput"
     static let openJump = "devnotes.openJump"
+    static let openOnLaunch = "devnotes.openOnLaunchID"
     static let wrapText = "devnotes.wrapText"
     static let showLineNumbers = "devnotes.showLineNumbers"
     static let spellCheck = "devnotes.spellCheck"
@@ -83,6 +84,11 @@ public final class AppModel {
 
     /// View/editor preferences surfaced in the View menu and honoured by the editor surface.
     public var openJump: OpenJump = .firstLine { didSet { defaults.set(openJump.rawValue, forKey: PreferenceKey.openJump) } }
+
+    /// Raw file name of the note to open automatically on launch. Empty means "the note at the top
+    /// of the list" (the historic behaviour); a stored ID whose file no longer exists also falls
+    /// back to the top of the list, so a deleted pick never leaves the app on a blank editor.
+    public var openOnLaunchID: String = "" { didSet { defaults.set(openOnLaunchID, forKey: PreferenceKey.openOnLaunch) } }
     public var wrapText = true { didSet { defaults.set(wrapText, forKey: PreferenceKey.wrapText) } }
     public var showLineNumbers = false { didSet { defaults.set(showLineNumbers, forKey: PreferenceKey.showLineNumbers) } }
 
@@ -98,9 +104,9 @@ public final class AppModel {
     /// the window's bottom edge and the last lines are scrollable up into view. Configured in Settings.
     public var bottomPadding: Double = 120 { didSet { defaults.set(bottomPadding, forKey: PreferenceKey.bottomPadding) } }
 
-    /// Text-zoom multiplier applied to the editor note text AND the sidebar file-list text (window
-    /// chrome/toolbars stay at native size). Driven by ⌘+ / ⌘- / ⌘0. Persisted so the last zoom
-    /// survives relaunch.
+    /// Text-zoom multiplier applied to the editor content area only (the note text). The sidebar
+    /// file list and window chrome/toolbars stay at native size. Driven by ⌘+ / ⌘- / ⌘0. Persisted
+    /// so the last zoom survives relaunch.
     public var zoom: Double = Zoom.normal { didSet { defaults.set(zoom, forKey: PreferenceKey.zoom) } }
 
     /// Whether the editor paints a background band behind the caret's line. The band colour is
@@ -187,6 +193,7 @@ public final class AppModel {
         if let raw = defaults.string(forKey: PreferenceKey.openJump), let value = OpenJump(rawValue: raw) {
             openJump = value
         }
+        openOnLaunchID = defaults.string(forKey: PreferenceKey.openOnLaunch) ?? ""
         if defaults.object(forKey: PreferenceKey.wrapText) != nil {
             wrapText = defaults.bool(forKey: PreferenceKey.wrapText)
         }
@@ -218,6 +225,16 @@ public final class AppModel {
         } else {
             pinnedIDs = Self.deduped(defaults.stringArray(forKey: PreferenceKey.pinned) ?? [])
         }
+    }
+
+    /// Force-pulls the latest cross-device pin list from iCloud and adopts it. Called when the app
+    /// returns to the foreground: the live `didChangeExternallyNotification` is only delivered while
+    /// the app is running, so a pin set on another device while this one was backgrounded or closed
+    /// would otherwise not surface until a later relaunch. `synchronize()` re-primes the store and
+    /// any freshly-pulled value is adopted here (and via the notification when it lands).
+    public func refreshPinsFromCloud() {
+        kvStore.synchronize()
+        applyExternalPinChange()
     }
 
     /// Adopts a pinned list that landed from another device via iCloud, keeping the local defaults
@@ -278,7 +295,7 @@ public final class AppModel {
     public func bootstrap() async {
         await refresh()
         editor.style = styleSheet
-        await selectFirstIfNeeded()
+        await selectInitialNote()
         // Land the caret live in the opened note (top of the pin list, at the top/bottom the
         // On-Open setting chooses) so the user can type immediately without a click.
         if selectedID != nil { editor.requestFocus() }
@@ -323,6 +340,18 @@ public final class AppModel {
     public func selectFirstIfNeeded() async {
         guard selectedID == nil, let first = visibleSummaries.first else { return }
         await select(first.id)
+    }
+
+    /// On launch, open the note the user chose in Settings (`openOnLaunchID`) when it still exists,
+    /// otherwise fall back to the note at the top of the list. Never overrides an already-open note.
+    public func selectInitialNote() async {
+        guard selectedID == nil else { return }
+        if openOnLaunchID.isEmpty == false,
+           summaries.contains(where: { $0.id.rawValue == openOnLaunchID }) {
+            await select(NoteID(openOnLaunchID))
+            return
+        }
+        await selectFirstIfNeeded()
     }
 
     /// Lazily starts sync after first paint; safe to call more than once.
