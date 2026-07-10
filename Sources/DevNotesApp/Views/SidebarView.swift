@@ -6,6 +6,17 @@ import SwiftUI
 struct SidebarView: View {
     @Bindable var model: AppModel
 
+    /// Base file-name point size (one point larger than the previous `.body`), scaled by the app
+    /// zoom. Platform bodies differ, so the baseline does too.
+    private var titleFontSize: CGFloat {
+        #if os(macOS)
+        let base: CGFloat = 14
+        #else
+        let base: CGFloat = 18
+        #endif
+        return base * CGFloat(model.zoom)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             SearchBarView(model: model)
@@ -21,14 +32,10 @@ struct SidebarView: View {
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(summary.title)
-                                .font(.body.bold())
-                                .lineLimit(1)
-                            Text(summary.modifiedAt, style: .date)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        // File name only — the modified date is no longer shown in the list.
+                        Text(summary.title)
+                            .font(.system(size: titleFontSize, weight: .bold))
+                            .lineLimit(1)
                     }
                     .tag(summary.id)
                     .contextMenu {
@@ -41,6 +48,11 @@ struct SidebarView: View {
                             Task { await model.delete(summary.id) }
                         }
                     }
+                }
+                // Drag to re-order pinned notes. The model ignores moves that fall outside the
+                // pinned group, so only pins are reorderable.
+                .onMove { source, destination in
+                    model.movePinned(from: source, to: destination)
                 }
             }
             .listStyle(.sidebar)

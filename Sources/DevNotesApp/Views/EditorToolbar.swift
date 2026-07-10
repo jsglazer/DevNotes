@@ -5,9 +5,12 @@ import SwiftUI
 /// `EditorViewModel`; the toolbar itself contains no text-manipulation logic.
 struct EditorToolbar: View {
     var editor: EditorViewModel
+    /// Icon point size. iOS passes a larger value (~20% up) so the pinned tools are comfortably
+    /// tappable; macOS uses the system default.
+    var iconSize: CGFloat?
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: iconSize == nil ? 12 : 18) {
             button("list.bullet", "Bullet List") { editor.run(.toggleBullet) }
             button("list.number", "Numbered List") { editor.run(.toggleNumber) }
             Divider().frame(height: 16)
@@ -23,18 +26,20 @@ struct EditorToolbar: View {
                 }
             } label: {
                 Label("Heading", systemImage: "textformat.size")
+                    .font(iconSize.map { .system(size: $0) })
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
             Spacer()
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .padding(.horizontal, iconSize == nil ? 8 : 12)
+        .padding(.vertical, iconSize == nil ? 6 : 8)
     }
 
     private func button(_ systemImage: String, _ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
+                .font(iconSize.map { .system(size: $0) })
         }
         .buttonStyle(.borderless)
         .help(title)

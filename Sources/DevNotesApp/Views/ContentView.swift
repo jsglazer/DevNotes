@@ -10,7 +10,6 @@ struct ContentView: View {
     @Bindable var model: AppModel
     #if os(iOS)
     @State private var isNotesListPresented = false
-    @State private var isOutlineToolsPresented = false
     @State private var isSettingsPresented = false
     #endif
 
@@ -79,8 +78,7 @@ struct ContentView: View {
                     IOSTopBar(
                         editor: model.editor,
                         onShowNotes: { isNotesListPresented = true },
-                        onNewNote: { Task { await model.newNote() } },
-                        onOutlineTools: { isOutlineToolsPresented = true }
+                        onNewNote: { Task { await model.newNote() } }
                     )
                 }
                 .background(.bar)
@@ -129,11 +127,6 @@ struct ContentView: View {
                         }
                 }
             }
-            .sheet(isPresented: $isOutlineToolsPresented) {
-                EditorToolbar(editor: model.editor)
-                    .padding()
-                    .presentationDetents([.height(90)])
-            }
             .onChange(of: model.selectedID) { _, _ in isNotesListPresented = false }
             .task {
                 await model.bootstrap()
@@ -165,14 +158,14 @@ private struct IOSTopBar: View {
     var editor: EditorViewModel
     var onShowNotes: () -> Void
     var onNewNote: () -> Void
-    var onOutlineTools: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        // Sizes are ~20% larger than the original bar so the controls are easier to hit on a phone.
+        HStack(spacing: 14) {
             circleButton("doc.text", action: onShowNotes)
             circleButton("plus", action: onNewNote)
             Spacer()
-            HStack(spacing: 18) {
+            HStack(spacing: 22) {
                 Menu {
                     ForEach(0 ... 3, id: \.self) { level in
                         Button(level == 0 ? "Body" : "Heading \(level)") { editor.setHeading(level) }
@@ -185,23 +178,22 @@ private struct IOSTopBar: View {
                     // Search lives inside the notes-list sheet; this jumps straight there.
                 }
             }
-            .font(.system(size: 16, weight: .medium))
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .font(.system(size: 19, weight: .medium))
+            .padding(.horizontal, 19)
+            .padding(.vertical, 12)
             .background(Capsule().fill(Color.gray.opacity(0.15)))
             Spacer()
-            circleButton("textformat.size", action: onOutlineTools)
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
     private func circleButton(_ systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 17, weight: .medium))
-                .frame(width: 44, height: 44)
+                .font(.system(size: 20, weight: .medium))
+                .frame(width: 53, height: 53)
                 .background(Circle().fill(Color.gray.opacity(0.15)))
         }
     }

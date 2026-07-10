@@ -16,6 +16,9 @@ struct StyleApplier {
     /// Resolved defaults used when a token is absent.
     var baseFontSize: CGFloat = 14
     var baseFontName: String = "Menlo"
+    /// Text-zoom multiplier (⌘+/⌘-). Multiplies every resolved font size so the whole note scales
+    /// while the user's stylesheet still governs the relative sizes.
+    var zoom: CGFloat = 1
 
     /// Fallback text color when the style sheet has no explicit `textColor` token — must be a
     /// dynamic system color so it stays legible when the theme switches (a fixed color left
@@ -32,7 +35,7 @@ struct StyleApplier {
     func bodyAttributes(from sheet: StyleSheet) -> [NSAttributedString.Key: Any] {
         var attributes: [NSAttributedString.Key: Any] = [:]
 
-        let size = sizeToken(sheet[.fontSize]) ?? baseFontSize
+        let size = (sizeToken(sheet[.fontSize]) ?? baseFontSize) * zoom
         let family = familyToken(sheet[.fontFamily]) ?? baseFontName
         attributes[.font] = makeFont(name: family, size: size, weight: sheet[.fontWeight])
 
@@ -53,7 +56,7 @@ struct StyleApplier {
     func headingAttributes(level: Int, from sheet: StyleSheet) -> [NSAttributedString.Key: Any] {
         var attributes = bodyAttributes(from: sheet)
         let key: StyleTokenKey = level <= 1 ? .heading1Size : (level == 2 ? .heading2Size : .heading3Size)
-        let size = sizeToken(sheet[key]) ?? (baseFontSize * (level <= 1 ? 1.8 : level == 2 ? 1.5 : 1.25))
+        let size = (sizeToken(sheet[key]) ?? (baseFontSize * (level <= 1 ? 1.8 : level == 2 ? 1.5 : 1.25))) * zoom
         attributes[.font] = makeFont(name: familyToken(sheet[.fontFamily]) ?? baseFontName, size: size, weight: .fontWeight(.named("bold")))
         if let color = colorToken(sheet[.headingColor]) {
             attributes[.foregroundColor] = color

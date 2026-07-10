@@ -11,6 +11,10 @@ final class EditorTextView: NSTextView {
     /// was performed, so the event is consumed.
     var onKeyChord: (@MainActor (DevNotesCore.KeyChord) -> Bool)?
 
+    /// Colour of the band painted behind the caret's line, or nil when the current-line highlight is
+    /// off. Set by the representable; already resolved for the active theme.
+    var currentLineHighlight: NSColor?
+
     override func keyDown(with event: NSEvent) {
         if let chord = DevNotesCore.KeyChord(macEvent: event), onKeyChord?(chord) == true {
             return
@@ -18,12 +22,45 @@ final class EditorTextView: NSTextView {
         super.keyDown(with: event)
     }
 
-    /// After the text draws, stroke a real full-width horizontal line across every Markdown
-    /// thematic-break line (`---`, `***`, `___`), so a rule *looks* like a rule while its
-    /// characters stay editable. The dashes themselves are dimmed by `MarkdownHighlighter`.
+    /// Paints (behind the glyphs) the current-line band, then lets the text draw, then strokes a
+    /// real full-width horizontal line across every Markdown thematic-break line (`---`, `***`,
+    /// `___`), so a rule *looks* like a rule while its characters stay editable. The dashes
+    /// themselves are dimmed by `MarkdownHighlighter`. The band is drawn first (and the view's own
+    /// background is clear) so it sits under the text rather than covering it.
     override func draw(_ dirtyRect: NSRect) {
+        drawCurrentLineHighlight(in: dirtyRect)
         super.draw(dirtyRect)
         drawThematicBreaks(in: dirtyRect)
+    }
+
+    /// Fills the full width of the caret's line with `currentLineHighlight`. No-op when the
+    /// highlight is off or there's an active selection spanning multiple characters (the band tracks
+    /// a caret, not a range).
+    private func drawCurrentLineHighlight(in dirtyRect: NSRect) {
+        guard let color = currentLineHighlight,
+              let layoutManager = textLayoutManager,
+              let contentManager = layoutManager.textContentManager else { return }
+        let ns = string as NSString
+        let caret = min(selectedRange().location, ns.length)
+        let lineRange = ns.lineRange(for: NSRange(location: caret, length: 0))
+        let origin = textContainerOrigin
+        let documentStart = contentManager.documentRange.location
+
+        color.setFill()
+        layoutManager.enumerateTextLayoutFragments(from: documentStart, options: [.ensuresLayout]) { fragment in
+            let offset = contentManager.offset(from: documentStart, to: fragment.rangeInElement.location)
+            guard offset <= ns.length else { return true }
+            // The fragment whose line range contains the caret is the caret's line.
+            let fragmentLine = ns.lineRange(for: NSRange(location: min(offset, ns.length), length: 0))
+            guard NSEqualRanges(fragmentLine, lineRange) else {
+                // Stop once we've scanned past the caret's line.
+                return offset <= lineRange.location
+            }
+            let frame = fragment.layoutFragmentFrame
+            let rect = NSRect(x: 0, y: frame.minY + origin.y, width: bounds.width, height: frame.height)
+            NSBezierPath(rect: rect).fill()
+            return true
+        }
     }
 
     private func drawThematicBreaks(in dirtyRect: NSRect) {
@@ -40,23 +77,26 @@ final class EditorTextView: NSTextView {
         layoutManager.enumerateTextLayoutFragments(from: documentStart, options: [.ensuresLayout]) { fragment in
             let frame = fragment.layoutFragmentFrame
             let y = frame.midY + origin.y
-            // Cheap vertical cull: skip fragments outside the region being redrawn.
-            guard y >= dirtyRect.minY - 1, y <= dirtyRect.maxY + 1 else {
-                return frame.maxY + origin.y < dirtyRect.minY || frame.minY + origin.y <= dirtyRect.maxY
+            // Draw only fragments intersecting the redraw region, but keep enumerating downward
+            // until we're fully past the bottom of it — the earlier early-out could stop before
+            // reaching a rule that sat just inside the dirty rect, so the line never appeared.
+            if frame.maxY + origin.y >= dirtyRect.minY - 1, frame.minY + origin.y <= dirtyRect.maxY + 1 {
+                let offset = contentManager.offset(from: documentStart, to: fragment.rangeInElement.location)
+                if offset <= ns.length {
+                    let lineRange = ns.lineRange(for: NSRange(location: offset, length: 0))
+                    let line = ns.substring(with: lineRange)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    if DevNotesCore.Markdown.isThematicBreak(line) {
+                        let path = NSBezierPath()
+                        path.lineWidth = 1
+                        path.move(to: NSPoint(x: leftInset, y: y.rounded() + 0.5))
+                        path.line(to: NSPoint(x: bounds.width - leftInset, y: y.rounded() + 0.5))
+                        path.stroke()
+                    }
+                }
             }
-            let offset = contentManager.offset(from: documentStart, to: fragment.rangeInElement.location)
-            guard offset <= ns.length else { return true }
-            let lineRange = ns.lineRange(for: NSRange(location: offset, length: 0))
-            let line = ns.substring(with: lineRange)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard DevNotesCore.Markdown.isThematicBreak(line) else { return true }
-
-            let path = NSBezierPath()
-            path.lineWidth = 1
-            path.move(to: NSPoint(x: leftInset, y: y.rounded() + 0.5))
-            path.line(to: NSPoint(x: bounds.width - leftInset, y: y.rounded() + 0.5))
-            path.stroke()
-            return true
+            // Stop once this fragment starts below the dirty region.
+            return frame.minY + origin.y <= dirtyRect.maxY + 1
         }
     }
 }

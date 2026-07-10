@@ -24,6 +24,15 @@ struct SettingsView: View {
         return formatter.string(from: Date())
     }
 
+    /// Bridges a `ColorPicker` (which works in `Color`) to a model property stored as a `#rrggbb`
+    /// hex string, so the current-line colours round-trip through the same hex the editor parses.
+    private func hexBinding(_ keyPath: ReferenceWritableKeyPath<AppModel, String>) -> Binding<Color> {
+        Binding(
+            get: { Color(hexString: model[keyPath: keyPath]) ?? .yellow },
+            set: { model[keyPath: keyPath] = $0.hexString }
+        )
+    }
+
     var body: some View {
         // Tabbed so each pane fits without the whole sheet needing to scroll — the tall "Editor
         // Style" input and the long shortcut list each get their own scroll space, and the style
@@ -58,12 +67,35 @@ struct SettingsView: View {
                 Toggle("Check spelling while typing", isOn: $model.spellCheck)
 
                 Stepper(
+                    "Text zoom: \(Int((model.zoom * 100).rounded()))%",
+                    value: $model.zoom,
+                    in: 0.6 ... 3.0,
+                    step: 0.1
+                )
+                Text("Scales the note text and the file-list text. On Mac you can also use ⌘+, ⌘-, and ⌘0.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Stepper(
                     "Bottom padding: \(Int(model.bottomPadding)) pt",
                     value: $model.bottomPadding,
                     in: 0 ... 600,
                     step: 20
                 )
                 Text("Blank space kept below the last line so the caret never sits against the window's bottom edge.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section("Current Line") {
+                Toggle("Highlight the current line", isOn: $model.highlightCurrentLine)
+                if model.highlightCurrentLine {
+                    ColorPicker("Light theme colour", selection: hexBinding(\.currentLineColorLight), supportsOpacity: false)
+                    ColorPicker("Dark theme colour", selection: hexBinding(\.currentLineColorDark), supportsOpacity: false)
+                }
+                Text("Paints a background band behind the line your caret is on, using the colour for the active theme.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -200,5 +232,32 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+private extension Color {
+    /// Builds a colour from a sanitised `#rrggbb(aa)` hex, reusing the editor's parser.
+    init?(hexString: String) {
+        guard let platform = PlatformColor(hex: hexString) else { return nil }
+        self = Color(platform)
+    }
+
+    /// The colour as an `#RRGGBB` string, so `ColorPicker` selections persist as the same hex the
+    /// editor reads.
+    var hexString: String {
+        PlatformColor(self).hexStringValue
+    }
+}
+
+private extension PlatformColor {
+    /// `#RRGGBB` for this colour, resolved through sRGB so the value is stable across colour spaces.
+    var hexStringValue: String {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        #if os(macOS)
+        (usingColorSpace(.sRGB) ?? self).getRed(&r, green: &g, blue: &b, alpha: &a)
+        #else
+        getRed(&r, green: &g, blue: &b, alpha: &a)
+        #endif
+        return String(format: "#%02X%02X%02X", Int((r * 255).rounded()), Int((g * 255).rounded()), Int((b * 255).rounded()))
     }
 }

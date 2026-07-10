@@ -20,9 +20,12 @@ struct MarkdownHighlighter {
     var style: StyleSheet
     var baseFontSize: CGFloat = 14
     var baseFontName: String = "Menlo"
+    /// Text-zoom multiplier (⌘+/⌘-), forwarded to the `StyleApplier` so the syntax pass sizes fonts
+    /// to match the zoomed body text.
+    var zoom: CGFloat = 1
 
     private var applier: StyleApplier {
-        StyleApplier(baseFontSize: baseFontSize, baseFontName: baseFontName)
+        StyleApplier(baseFontSize: baseFontSize, baseFontName: baseFontName, zoom: zoom)
     }
 
     // MARK: - Palette
@@ -75,6 +78,9 @@ struct MarkdownHighlighter {
 
         let baseFont = (body[.font] as? PlatformFont)
             ?? PlatformFont.monospacedSystemFont(ofSize: baseFontSize, weight: .regular)
+        // The body paragraph style (line/paragraph spacing) is the base each list line's hanging
+        // indent is layered onto, so wrapped bullet/number lines tuck under their text.
+        let baseParagraph = (body[.paragraphStyle] as? NSParagraphStyle) ?? NSParagraphStyle()
 
         // --- Block markers (per line) ---
         // Headings: the whole line — leading #'s and heading text — takes the per-level color,
@@ -94,13 +100,16 @@ struct MarkdownHighlighter {
             }
         }
 
-        // Bullet markers: `-`, `*`, `+` followed by a space.
+        // Bullet markers: `-`, `*`, `+` followed by a space. The whole matched prefix (indent +
+        // marker + trailing space) sets the hanging indent so wrapped text tucks under the marker.
         applyRegex(Self.bulletPattern, in: ns, storage: storage) { match in
             storage.addAttribute(.foregroundColor, value: Self.listMarker, range: match.range(at: 1))
+            applyHangingIndent(prefixRange: match.range, in: ns, storage: storage, baseFont: baseFont, base: baseParagraph)
         }
         // Numbered markers: `12.` followed by a space.
         applyRegex(Self.numberedPattern, in: ns, storage: storage) { match in
             storage.addAttribute(.foregroundColor, value: Self.listMarker, range: match.range(at: 1))
+            applyHangingIndent(prefixRange: match.range, in: ns, storage: storage, baseFont: baseFont, base: baseParagraph)
         }
         // Blockquote marker.
         applyRegex(Self.quotePattern, in: ns, storage: storage) { match in
@@ -137,6 +146,29 @@ struct MarkdownHighlighter {
     }
 
     // MARK: - Helpers
+
+    /// Gives a list line a hanging indent: continuation (wrapped) lines align under the text after
+    /// the marker, instead of falling back to the left margin. `prefixRange` is the matched
+    /// indent + marker + space; its rendered width in `baseFont` becomes the paragraph's `headIndent`.
+    /// The first line keeps its natural start (`firstLineHeadIndent = 0`) because its own prefix
+    /// characters already provide that offset.
+    private func applyHangingIndent(
+        prefixRange: NSRange,
+        in ns: NSString,
+        storage: NSTextStorage,
+        baseFont: PlatformFont,
+        base: NSParagraphStyle
+    ) {
+        guard prefixRange.length > 0, NSMaxRange(prefixRange) <= ns.length else { return }
+        let prefix = ns.substring(with: prefixRange)
+        let width = (prefix as NSString).size(withAttributes: [.font: baseFont]).width
+        guard width > 0 else { return }
+        guard let paragraph = base.mutableCopy() as? NSMutableParagraphStyle else { return }
+        paragraph.headIndent = width
+        paragraph.firstLineHeadIndent = 0
+        let lineRange = ns.paragraphRange(for: prefixRange)
+        storage.addAttribute(.paragraphStyle, value: paragraph, range: lineRange)
+    }
 
     private func applyRegex(
         _ regex: NSRegularExpression?,

@@ -74,6 +74,16 @@ struct AppCommands: Commands {
                 Text("Light").tag(AppTheme.light)
                 Text("Dark").tag(AppTheme.dark)
             }
+
+            Divider()
+
+            // Text zoom for the editor + sidebar. ⌘+ / ⌘- / ⌘0, the usual document-zoom keys.
+            Button("Zoom In") { model.zoomIn() }
+                .keyboardShortcut("+", modifiers: .command)
+            Button("Zoom Out") { model.zoomOut() }
+                .keyboardShortcut("-", modifiers: .command)
+            Button("Actual Size") { model.zoomReset() }
+                .keyboardShortcut("0", modifiers: .command)
         }
 
         CommandGroup(replacing: .help) {

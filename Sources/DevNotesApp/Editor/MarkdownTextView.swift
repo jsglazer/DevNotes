@@ -13,6 +13,11 @@ struct MarkdownTextView: View {
     var wrapText: Bool = true
     var showLineNumbers: Bool = false
     var spellCheck: Bool = true
+    /// Text-zoom multiplier (⌘+/⌘-) applied to the note's fonts.
+    var zoom: Double = 1
+    /// Background band painted behind the caret's line, or nil when the current-line highlight is
+    /// off. Already resolved for the active light/dark theme by the model.
+    var currentLineHighlight: PlatformColor?
     /// Extra scrollable space kept below the last line (points), so the caret never sits against
     /// the bottom edge and the final lines can scroll up into view.
     var bottomPadding: Double = 0
@@ -34,6 +39,8 @@ struct MarkdownTextView: View {
             wrapText: wrapText,
             showLineNumbers: showLineNumbers,
             spellCheck: spellCheck,
+            zoom: zoom,
+            currentLineHighlight: currentLineHighlight,
             bottomPadding: bottomPadding,
             searchMatches: searchMatches,
             currentMatch: currentMatch,
@@ -53,6 +60,8 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
     var wrapText: Bool
     var showLineNumbers: Bool
     var spellCheck: Bool
+    var zoom: Double
+    var currentLineHighlight: PlatformColor?
     var bottomPadding: Double
     var searchMatches: [DevNotesCore.TextSelection]
     var currentMatch: DevNotesCore.TextSelection?
@@ -106,6 +115,17 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         context.coordinator.parent = self
         textView.onKeyChord = onKeyChord
 
+        // Current-line band: hand the colour to the view and force a redraw when it changes (toggled
+        // on/off, theme switched, or a new colour picked in Settings).
+        if context.coordinator.currentLineHighlightChanged(currentLineHighlight) {
+            textView.currentLineHighlight = currentLineHighlight
+            textView.needsDisplay = true
+        }
+        // A zoom change must re-run the (font-sizing) syntax pass over the whole note.
+        if context.coordinator.zoomChanged(zoom) {
+            context.coordinator.invalidateHighlight()
+        }
+
         let bottomInset = CGFloat(max(0, bottomPadding))
         if scrollView.contentInsets.bottom != bottomInset {
             scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
@@ -126,7 +146,7 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             context.coordinator.invalidateHighlight()
         }
 
-        textView.typingAttributes = StyleApplier().bodyAttributes(from: style)
+        textView.typingAttributes = StyleApplier(zoom: CGFloat(zoom)).bodyAttributes(from: style)
         // Re-highlight only when the text or style actually changed. The delegate callbacks
         // already highlight after each edit, and this update pass runs right behind them — without
         // this guard every keystroke paid for the full syntax pass twice.
@@ -135,7 +155,7 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             // Re-colouring re-lays the TextKit 2 viewport, which can shake the scroll position;
             // pin it so a background re-highlight never makes the screen jump under the reader.
             context.coordinator.preservingScroll(of: scrollView) {
-                MarkdownHighlighter(style: style).apply(to: storage)
+                MarkdownHighlighter(style: style, zoom: CGFloat(zoom)).apply(to: storage)
             }
             context.coordinator.didHighlight(text: textView.string, style: style)
         }
@@ -211,8 +231,27 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         private var appliedWrapText: Bool?
         private var appliedWrapWidth: CGFloat?
 
+        /// Last current-line colour + zoom pushed to the view, so an unchanged value doesn't force a
+        /// wasteful full redraw / re-highlight on every keystroke.
+        private var lastCurrentLineHighlight: PlatformColor?
+        private var didApplyCurrentLineHighlight = false
+        private var lastZoom: Double?
+
         func needsHighlight(text: String, style: StyleSheet) -> Bool {
             highlightedText != text || highlightedStyle != style
+        }
+
+        /// True when the current-line colour changed since the last update (records the new value).
+        func currentLineHighlightChanged(_ color: PlatformColor?) -> Bool {
+            defer { lastCurrentLineHighlight = color; didApplyCurrentLineHighlight = true }
+            guard didApplyCurrentLineHighlight else { return true }
+            return lastCurrentLineHighlight != color
+        }
+
+        /// True when the zoom changed since the last update (records the new value).
+        func zoomChanged(_ value: Double) -> Bool {
+            defer { lastZoom = value }
+            return lastZoom != value
         }
 
         /// True when the wrap mode + width already match the last-applied configuration (and records
@@ -317,10 +356,11 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             parent.text = edit.text
             parent.selection = edit.selection
             if let storage = textView.textStorage {
-                MarkdownHighlighter(style: parent.style).apply(to: storage)
+                MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: storage)
                 didHighlight(text: edit.text, style: parent.style)
             }
             textView.scrollRangeToVisible(textView.selectedRange())
+            textView.needsDisplay = true
             ruler?.needsDisplay = true
             return true
         }
@@ -336,15 +376,16 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
                 // keeps the caret on-screen.
                 if let scrollView = textView.enclosingScrollView {
                     preservingScroll(of: scrollView) {
-                        MarkdownHighlighter(style: parent.style).apply(to: storage)
+                        MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: storage)
                     }
                 } else {
-                    MarkdownHighlighter(style: parent.style).apply(to: storage)
+                    MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: storage)
                 }
                 didHighlight(text: textView.string, style: parent.style)
             }
             // Follow the caret as the user types so text added at the bottom isn't clipped.
             textView.scrollRangeToVisible(range)
+            textView.needsDisplay = true
             ruler?.needsDisplay = true
         }
 
@@ -352,6 +393,8 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             guard let textView = notification.object as? NSTextView else { return }
             let range = textView.selectedRange()
             parent.selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
+            // Repaint so the current-line band follows the caret to its new line.
+            if parent.currentLineHighlight != nil { textView.needsDisplay = true }
         }
     }
 }
@@ -366,6 +409,8 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
     var wrapText: Bool
     var showLineNumbers: Bool
     var spellCheck: Bool
+    var zoom: Double
+    var currentLineHighlight: PlatformColor?
     var bottomPadding: Double
     /// Accepted for signature parity with macOS; the Find bar is macOS-only, so iOS ignores these.
     var searchMatches: [DevNotesCore.TextSelection]
@@ -402,20 +447,31 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         if textView.contentInset.bottom != bottomInset {
             textView.contentInset.bottom = bottomInset
         }
+        // A text mismatch here means the model changed the text out-of-band (an outline command,
+        // find/replace) — assigning `.text` resets the scroll position and selection, which was the
+        // "screen jumps / goes blank after a menu command" report. Pin the scroll offset across the
+        // reset so the view stays put.
+        let preservedOffset = textView.contentOffset
+        var didResetText = false
         if textView.text != text {
             textView.text = text
             // Resetting the string wipes attribute runs — re-colour is mandatory.
             context.coordinator.invalidateHighlight()
+            didResetText = true
         }
         // Toggling the gutter must never change the note's font colour.
         if context.coordinator.showLineNumbersChanged(showLineNumbers) {
             context.coordinator.invalidateHighlight()
         }
-        textView.typingAttributes = StyleApplier().bodyAttributes(from: style)
+        // A zoom change must re-run the (font-sizing) syntax pass over the whole note.
+        if context.coordinator.zoomChanged(zoom) {
+            context.coordinator.invalidateHighlight()
+        }
+        textView.typingAttributes = StyleApplier(zoom: CGFloat(zoom)).bodyAttributes(from: style)
         // Skip the syntax pass when the delegate callbacks already highlighted this exact
         // text/style — otherwise every keystroke runs the highlighter twice.
         if context.coordinator.needsHighlight(text: textView.text, style: style) {
-            MarkdownHighlighter(style: style).apply(to: textView.textStorage)
+            MarkdownHighlighter(style: style, zoom: CGFloat(zoom)).apply(to: textView.textStorage)
             context.coordinator.didHighlight(text: textView.text, style: style)
         }
 
@@ -424,8 +480,16 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         if NSMaxRange(desired) <= length {
             textView.selectedRange = desired
         }
+        if didResetText, textView.contentOffset != preservedOffset {
+            textView.setContentOffset(preservedOffset, animated: false)
+        }
         if container.showLineNumbers != showLineNumbers {
             container.showLineNumbers = showLineNumbers
+        }
+        container.currentLineHighlight = currentLineHighlight
+        // Honour a focus request (new/opened note) so the caret is live without a tap.
+        if context.coordinator.focusRequestChanged(focusRequest) {
+            DispatchQueue.main.async { [weak textView] in textView?.becomeFirstResponder() }
         }
         container.refreshOverlays()
     }
@@ -441,9 +505,22 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         private var highlightedStyle: StyleSheet?
         /// Last-seen gutter state, so a line-number toggle can force a re-colour.
         private var lastShowLineNumbers: Bool?
+        /// Last-seen zoom + focus token so a change forces a re-colour / focus grab exactly once.
+        private var lastZoom: Double?
+        private var lastFocusRequest = 0
 
         func needsHighlight(text: String, style: StyleSheet) -> Bool {
             highlightedText != text || highlightedStyle != style
+        }
+
+        func zoomChanged(_ value: Double) -> Bool {
+            defer { lastZoom = value }
+            return lastZoom != value
+        }
+
+        func focusRequestChanged(_ value: Int) -> Bool {
+            defer { lastFocusRequest = value }
+            return lastFocusRequest != value
         }
 
         func didHighlight(text: String, style: StyleSheet) {
@@ -472,11 +549,15 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
             guard text == "\n" else { return true }
             let selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
             let edit = engine.insertNewline(text: textView.text, selection: selection)
+            let offset = textView.contentOffset
             textView.text = edit.text
-            textView.typingAttributes = StyleApplier().bodyAttributes(from: parent.style)
-            MarkdownHighlighter(style: parent.style).apply(to: textView.textStorage)
+            textView.typingAttributes = StyleApplier(zoom: CGFloat(parent.zoom)).bodyAttributes(from: parent.style)
+            MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: textView.textStorage)
             didHighlight(text: edit.text, style: parent.style)
             textView.selectedRange = NSRange(location: edit.selection.location, length: edit.selection.length)
+            // Resetting `.text` snaps the scroll to the top; pin it so list-continuation on Return
+            // doesn't jump the view (worse on longer notes).
+            if textView.contentOffset != offset { textView.setContentOffset(offset, animated: false) }
             parent.text = edit.text
             parent.selection = edit.selection
             container?.refreshOverlays()
@@ -485,16 +566,26 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
 
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
-            MarkdownHighlighter(style: parent.style).apply(to: textView.textStorage)
-            didHighlight(text: textView.text, style: parent.style)
             let range = textView.selectedRange
             parent.selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
+            // Don't re-apply attributes while the system is mid-composition (dictation / IME marked
+            // text). Rewriting the storage under a live dictation session both jumped the view and
+            // duplicated spaces ("extra spaces after voice-to-text"); defer the colour pass until
+            // composition commits and this fires again with no marked range.
+            guard textView.markedTextRange == nil else {
+                container?.refreshOverlays()
+                return
+            }
+            MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: textView.textStorage)
+            didHighlight(text: textView.text, style: parent.style)
             container?.refreshOverlays()
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
             let range = textView.selectedRange
             parent.selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
+            // Move the current-line band to the caret's new line.
+            container?.refreshOverlays()
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -511,6 +602,8 @@ final class EditorContainerView: UIView {
     let gutter: IOSLineNumberGutter
     /// Non-interactive overlay that draws a real horizontal line over every `---` thematic break.
     let ruleOverlay: IOSThematicBreakOverlay
+    /// Underlay (behind the clear-backed text view) that fills the caret's line with a band.
+    let currentLineView: IOSCurrentLineOverlay
     private let gutterWidth: CGFloat = 40
 
     var showLineNumbers = false {
@@ -523,32 +616,94 @@ final class EditorContainerView: UIView {
         }
     }
 
+    /// Band colour for the caret's line, or nil to hide it.
+    var currentLineHighlight: UIColor? {
+        didSet {
+            guard currentLineHighlight != oldValue else { return }
+            currentLineView.color = currentLineHighlight
+            currentLineView.isHidden = currentLineHighlight == nil
+            currentLineView.setNeedsDisplay()
+        }
+    }
+
     init(textView: UITextView) {
         self.textView = textView
         self.gutter = IOSLineNumberGutter(textView: textView)
         self.ruleOverlay = IOSThematicBreakOverlay(textView: textView)
+        self.currentLineView = IOSCurrentLineOverlay(textView: textView)
         super.init(frame: .zero)
+        // Order matters: the current-line band sits UNDER the (clear) text view; the rule + gutter
+        // sit over it.
+        addSubview(currentLineView)
         addSubview(textView)
         addSubview(ruleOverlay)
         addSubview(gutter)
         gutter.isHidden = true
+        currentLineView.isHidden = true
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    /// Redraws the overlays that track the text view's live layout/scroll (rules, line numbers).
+    /// Redraws the overlays that track the text view's live layout/scroll (band, rules, line numbers).
     func refreshOverlays() {
         gutter.setNeedsDisplay()
         ruleOverlay.setNeedsDisplay()
+        currentLineView.setNeedsDisplay()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         textView.frame = bounds
         ruleOverlay.frame = bounds
+        currentLineView.frame = bounds
         gutter.frame = CGRect(x: 0, y: 0, width: gutterWidth, height: bounds.height)
         refreshOverlays()
+    }
+}
+
+/// Fills the caret's line with a background band, tracking the text view's layout + scroll offset.
+/// A non-interactive underlay drawn beneath the clear-backed `UITextView`, so the band appears
+/// behind the text rather than over it.
+final class IOSCurrentLineOverlay: UIView {
+    private weak var textView: UITextView?
+    var color: UIColor?
+
+    init(textView: UITextView) {
+        self.textView = textView
+        super.init(frame: .zero)
+        backgroundColor = .clear
+        isUserInteractionEnabled = false
+        contentMode = .redraw
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func draw(_ rect: CGRect) {
+        guard let color, let textView,
+              let layoutManager = textView.textLayoutManager,
+              let contentManager = layoutManager.textContentManager else { return }
+        let ns = textView.text as NSString
+        let caret = min(textView.selectedRange.location, ns.length)
+        let lineRange = ns.lineRange(for: NSRange(location: caret, length: 0))
+        let insetTop = textView.textContainerInset.top
+        let offsetY = textView.contentOffset.y
+        let documentStart = contentManager.documentRange.location
+
+        color.setFill()
+        layoutManager.enumerateTextLayoutFragments(from: documentStart, options: [.ensuresLayout]) { fragment in
+            let offset = contentManager.offset(from: documentStart, to: fragment.rangeInElement.location)
+            guard offset <= ns.length else { return true }
+            let fragmentLine = ns.lineRange(for: NSRange(location: min(offset, ns.length), length: 0))
+            guard NSEqualRanges(fragmentLine, lineRange) else {
+                return offset <= lineRange.location
+            }
+            let frame = fragment.layoutFragmentFrame
+            let bandRect = CGRect(x: 0, y: frame.minY + insetTop - offsetY, width: bounds.width, height: frame.height)
+            UIRectFill(bandRect)
+            return true
+        }
     }
 }
 

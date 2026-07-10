@@ -35,6 +35,18 @@ private enum PreferenceKey {
     static let pinned = "devnotes.pinnedIDs"
     static let dateFormat = "devnotes.dateFormat"
     static let bottomPadding = "devnotes.bottomPadding"
+    static let zoom = "devnotes.zoom"
+    static let highlightCurrentLine = "devnotes.highlightCurrentLine"
+    static let currentLineLight = "devnotes.currentLineLight"
+    static let currentLineDark = "devnotes.currentLineDark"
+}
+
+/// Zoom bounds and step for the editor/sidebar text scale (⌘+ / ⌘- / ⌘0).
+private enum Zoom {
+    static let min = 0.6
+    static let max = 3.0
+    static let step = 0.1
+    static let normal = 1.0
 }
 
 /// The composition root and app-wide state. It owns the injected `NoteRepository` and
@@ -86,6 +98,17 @@ public final class AppModel {
     /// the window's bottom edge and the last lines are scrollable up into view. Configured in Settings.
     public var bottomPadding: Double = 120 { didSet { defaults.set(bottomPadding, forKey: PreferenceKey.bottomPadding) } }
 
+    /// Text-zoom multiplier applied to the editor note text AND the sidebar file-list text (window
+    /// chrome/toolbars stay at native size). Driven by ⌘+ / ⌘- / ⌘0. Persisted so the last zoom
+    /// survives relaunch.
+    public var zoom: Double = Zoom.normal { didSet { defaults.set(zoom, forKey: PreferenceKey.zoom) } }
+
+    /// Whether the editor paints a background band behind the caret's line. The band colour is
+    /// theme-specific (`currentLineColorLight` / `currentLineColorDark`), each a `#rrggbb(aa)` hex.
+    public var highlightCurrentLine = false { didSet { defaults.set(highlightCurrentLine, forKey: PreferenceKey.highlightCurrentLine) } }
+    public var currentLineColorLight = "#FFF6C2" { didSet { defaults.set(currentLineColorLight, forKey: PreferenceKey.currentLineLight) } }
+    public var currentLineColorDark = "#3A3B22" { didSet { defaults.set(currentLineColorDark, forKey: PreferenceKey.currentLineDark) } }
+
     /// User-configurable keyboard shortcuts, loaded once at launch from `~/.config/devnotes/keymap.json`
     /// (seeded with the defaults on first run). The View menu, editor key handling, and the Settings
     /// shortcut list all read from this single table.
@@ -98,8 +121,15 @@ public final class AppModel {
     /// the same source of truth.
     public var columnVisibility: NavigationSplitViewVisibility = .all
 
-    /// Notes the user pinned to the top of the list. Stored as raw file names.
-    public private(set) var pinnedIDs: Set<String> = []
+    /// Notes the user pinned to the top of the list, in the user's chosen display order (drag to
+    /// re-order). Stored as raw file names. Mirrored to iCloud key-value storage so pins set on one
+    /// device appear on the others.
+    public private(set) var pinnedIDs: [String] = []
+
+    /// iCloud key-value store backing the pinned list, so pins sync Mac ⇄ iPhone/iPad. Small,
+    /// eventually-consistent; the on-disk `UserDefaults` copy is the local fallback when iCloud is
+    /// unavailable.
+    @ObservationIgnored private let kvStore = NSUbiquitousKeyValueStore.default
 
     public private(set) var conflicts: [ConflictRecord] = []
     public let editor = EditorViewModel()
@@ -129,6 +159,16 @@ public final class AppModel {
             self?.hasUnsavedEdits = true
             self?.scheduleSave()
         }
+        // Pull pins that arrive from another device. The notification fires off the main thread, so
+        // hop back before touching @MainActor state.
+        NotificationCenter.default.addObserver(
+            forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: kvStore,
+            queue: nil
+        ) { [weak self] _ in
+            Task { @MainActor in self?.applyExternalPinChange() }
+        }
+        kvStore.synchronize()
     }
 
     /// The open note's display title (first non-empty line, heading markers stripped), derived
@@ -161,19 +201,72 @@ public final class AppModel {
         if defaults.object(forKey: PreferenceKey.bottomPadding) != nil {
             bottomPadding = defaults.double(forKey: PreferenceKey.bottomPadding)
         }
-        pinnedIDs = Set(defaults.stringArray(forKey: PreferenceKey.pinned) ?? [])
+        if defaults.object(forKey: PreferenceKey.zoom) != nil {
+            zoom = clampZoom(defaults.double(forKey: PreferenceKey.zoom))
+        }
+        highlightCurrentLine = defaults.bool(forKey: PreferenceKey.highlightCurrentLine)
+        if let raw = defaults.string(forKey: PreferenceKey.currentLineLight), raw.isEmpty == false {
+            currentLineColorLight = raw
+        }
+        if let raw = defaults.string(forKey: PreferenceKey.currentLineDark), raw.isEmpty == false {
+            currentLineColorDark = raw
+        }
+        // iCloud copy wins when present (it's the cross-device source of truth); otherwise fall back
+        // to the local list so a first launch offline still shows the device's own pins.
+        if let cloud = kvStore.array(forKey: PreferenceKey.pinned) as? [String] {
+            pinnedIDs = Self.deduped(cloud)
+        } else {
+            pinnedIDs = Self.deduped(defaults.stringArray(forKey: PreferenceKey.pinned) ?? [])
+        }
     }
 
-    /// Notes to show: search-filtered, then pinned notes hoisted to the top (each group keeps the
-    /// modified-date order the repository already produced).
+    /// Adopts a pinned list that landed from another device via iCloud, keeping the local defaults
+    /// copy in step. No-op when it matches what we already show.
+    private func applyExternalPinChange() {
+        guard let cloud = kvStore.array(forKey: PreferenceKey.pinned) as? [String] else { return }
+        let deduped = Self.deduped(cloud)
+        guard deduped != pinnedIDs else { return }
+        pinnedIDs = deduped
+        defaults.set(deduped, forKey: PreferenceKey.pinned)
+    }
+
+    /// Removes duplicates while preserving first-seen order.
+    private static func deduped(_ ids: [String]) -> [String] {
+        var seen = Set<String>()
+        return ids.filter { seen.insert($0).inserted }
+    }
+
+    private func clampZoom(_ value: Double) -> Double {
+        min(Zoom.max, max(Zoom.min, value))
+    }
+
+    /// Notes to show: search-filtered, then pinned notes hoisted to the top in the user's chosen
+    /// pin order (drag-to-reorder). Unpinned notes keep the modified-date order the repository
+    /// produced.
     public var visibleSummaries: [NoteSummary] {
         let filtered = SearchEngine.filter(summaries, query: searchQuery, options: searchOptions)
-        let pinned = filtered.filter { pinnedIDs.contains($0.id.rawValue) }
-        let rest = filtered.filter { pinnedIDs.contains($0.id.rawValue) == false }
+        let order = pinnedIndex
+        let pinned = filtered
+            .filter { order[$0.id.rawValue] != nil }
+            .sorted { (order[$0.id.rawValue] ?? 0) < (order[$1.id.rawValue] ?? 0) }
+        let rest = filtered.filter { order[$0.id.rawValue] == nil }
         return pinned + rest
     }
 
+    /// Fast lookup of a note's position within the pinned list (nil when unpinned).
+    private var pinnedIndex: [String: Int] {
+        Dictionary(uniqueKeysWithValues: pinnedIDs.enumerated().map { ($1, $0) })
+    }
+
     public func isPinned(_ id: NoteID) -> Bool { pinnedIDs.contains(id.rawValue) }
+
+    /// Count of currently-visible pinned rows (the reorderable prefix of `visibleSummaries`).
+    public var visiblePinnedCount: Int {
+        let order = pinnedIndex
+        return SearchEngine.filter(summaries, query: searchQuery, options: searchOptions)
+            .filter { order[$0.id.rawValue] != nil }
+            .count
+    }
 
     public var styleSheet: StyleSheet {
         StyleSanitizer.sanitize(styleInput)
@@ -186,6 +279,9 @@ public final class AppModel {
         await refresh()
         editor.style = styleSheet
         await selectFirstIfNeeded()
+        // Land the caret live in the opened note (top of the pin list, at the top/bottom the
+        // On-Open setting chooses) so the user can type immediately without a click.
+        if selectedID != nil { editor.requestFocus() }
         startWatchingIfNeeded()
     }
 
@@ -237,9 +333,9 @@ public final class AppModel {
 
     public func refresh() async {
         summaries = (try? await repository.summaries()) ?? []
-        // Drop pins whose files no longer exist so the set can't grow stale forever.
+        // Drop pins whose files no longer exist so the list can't grow stale forever (order kept).
         let live = Set(summaries.map(\.id.rawValue))
-        let pruned = pinnedIDs.intersection(live)
+        let pruned = pinnedIDs.filter { live.contains($0) }
         if pruned != pinnedIDs { setPinned(pruned) }
     }
 
@@ -360,7 +456,7 @@ public final class AppModel {
             editor.text = ""
         }
         if pinnedIDs.contains(id.rawValue) {
-            setPinned(pinnedIDs.subtracting([id.rawValue]))
+            setPinned(pinnedIDs.filter { $0 != id.rawValue })
         }
         await refresh()
     }
@@ -370,15 +466,54 @@ public final class AppModel {
     public func togglePin(_ id: NoteID) {
         let raw = id.rawValue
         if pinnedIDs.contains(raw) {
-            setPinned(pinnedIDs.subtracting([raw]))
+            setPinned(pinnedIDs.filter { $0 != raw })
         } else {
-            setPinned(pinnedIDs.union([raw]))
+            // New pins land at the end of the pinned group; the user drags to re-order.
+            setPinned(pinnedIDs + [raw])
         }
     }
 
-    private func setPinned(_ ids: Set<String>) {
-        pinnedIDs = ids
-        defaults.set(Array(ids), forKey: PreferenceKey.pinned)
+    /// Re-orders the pinned rows from a drag in the sidebar. `source`/`destination` are offsets into
+    /// the visible list, whose reorderable prefix is the currently-visible pinned rows; moves that
+    /// stray outside that prefix are ignored so a pinned note can't be dragged into the unpinned
+    /// group (or vice-versa).
+    public func movePinned(from source: IndexSet, to destination: Int) {
+        let pinnedCount = visiblePinnedCount
+        guard source.allSatisfy({ $0 < pinnedCount }), destination <= pinnedCount else { return }
+        var visibleOrder = Array(visibleSummaries.prefix(pinnedCount)).map(\.id.rawValue)
+        visibleOrder.move(fromOffsets: source, toOffset: destination)
+        // Preserve any pinned IDs hidden by the current search filter, appended after the visible ones.
+        let visibleSet = Set(visibleOrder)
+        let hidden = pinnedIDs.filter { visibleSet.contains($0) == false }
+        setPinned(visibleOrder + hidden)
+    }
+
+    private func setPinned(_ ids: [String]) {
+        let ordered = Self.deduped(ids)
+        pinnedIDs = ordered
+        defaults.set(ordered, forKey: PreferenceKey.pinned)
+        // Mirror to iCloud so the other devices pick the change up.
+        kvStore.set(ordered, forKey: PreferenceKey.pinned)
+        kvStore.synchronize()
+    }
+
+    // MARK: - Zoom
+
+    public func zoomIn() { zoom = clampZoom(rounded2(zoom + Zoom.step)) }
+    public func zoomOut() { zoom = clampZoom(rounded2(zoom - Zoom.step)) }
+    public func zoomReset() { zoom = Zoom.normal }
+
+    /// Rounds to two decimals so a run of ⌘+/⌘- keeps clean 0.1 steps (no float drift like 1.2000001).
+    private func rounded2(_ value: Double) -> Double { (value * 100).rounded() / 100 }
+
+    // MARK: - Current-line highlight
+
+    /// The current-line band colour resolved for `scheme`, or nil when the highlight is off or the
+    /// stored hex can't be parsed. Passed to the editor surface, which paints the band natively.
+    public func currentLineColor(for scheme: ColorScheme) -> PlatformColor? {
+        guard highlightCurrentLine else { return nil }
+        let hex = scheme == .dark ? currentLineColorDark : currentLineColorLight
+        return PlatformColor(hex: hex)
     }
 
     // MARK: - Sidebar

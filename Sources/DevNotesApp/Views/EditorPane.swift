@@ -4,6 +4,8 @@ import SwiftUI
 /// The main editing pane: outline toolbar over the TextKit 2 editor.
 struct EditorPane: View {
     @Bindable var model: AppModel
+    /// Resolves the current-line band colour for the active theme (the native editor paints it).
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,6 +19,10 @@ struct EditorPane: View {
                     FindReplaceBar(model: model)
                     Divider()
                 }
+                #else
+                // iOS keeps the outline formatting tools pinned on-screen (not behind a sheet).
+                EditorToolbar(editor: model.editor, iconSize: 20)
+                Divider()
                 #endif
                 MarkdownTextView(
                     text: Binding(get: { model.editor.text }, set: { model.editor.text = $0 }),
@@ -25,6 +31,8 @@ struct EditorPane: View {
                     wrapText: model.wrapText,
                     showLineNumbers: model.showLineNumbers,
                     spellCheck: model.spellCheck,
+                    zoom: model.zoom,
+                    currentLineHighlight: model.currentLineColor(for: colorScheme),
                     bottomPadding: model.bottomPadding,
                     searchMatches: model.find.isPresented ? model.find.matches : [],
                     currentMatch: model.find.isPresented ? model.find.currentMatch : nil,
