@@ -112,13 +112,18 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         // flush against the window edge, and the final lines can scroll up into view.
         scrollView.automaticallyAdjustsContentInsets = false
 
-        // Line-number gutter (drawn on demand; visibility toggled in updateNSView).
-        let ruler = LineNumberRulerView(textView: textView, scrollView: scrollView)
-        scrollView.verticalRulerView = ruler
-        scrollView.hasVerticalRuler = true
-        context.coordinator.ruler = ruler
+        // Line-number gutter: a FIXED overlay floated over a left text inset (visibility toggled in
+        // updateNSView), NOT an NSRulerView — toggling `rulersVisible` on a TextKit 2 view retiled
+        // the scroll view and blanked the viewport (see `MacLineNumberGutter`). As a floating
+        // subview it stays put while the text scrolls beneath it.
+        let gutter = MacLineNumberGutter(textView: textView, scrollView: scrollView)
+        gutter.frame = NSRect(x: 0, y: 0, width: MacLineNumberGutter.width, height: scrollView.bounds.height)
+        gutter.isHidden = true
+        scrollView.addFloatingSubview(gutter, for: .vertical)
+        context.coordinator.gutter = gutter
 
-        // Invalidate the gutter as the user scrolls.
+        // Redraw the gutter (and resize it to the visible height) as the user scrolls or the view
+        // resizes.
         scrollView.contentView.postsBoundsChangedNotifications = true
         context.coordinator.observeBoundsChanges(of: scrollView.contentView)
 
@@ -146,34 +151,22 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
         }
 
-        // Toggling the gutter must run BEFORE `applyWrapping`: showing the ruler narrows the text
-        // view by `ruleThickness`, so the soft-wrap container has to be re-sized against the new
-        // (post-ruler) content width in the same pass. The toggle does NOT re-highlight: showing
-        // the ruler leaves attribute runs untouched, and the full-document `setAttributes` a
-        // re-highlight runs is exactly what blanked the viewport ("text disappears when line
-        // numbers are turned on").
+        // Show/hide the gutter by toggling its overlay and the text view's LEFT inset (so the text
+        // clears the numbers) — never `rulersVisible`, which retiled the scroll view and blanked the
+        // TextKit 2 viewport. Changing `textContainerInset` is a routine relayout the text view
+        // handles in place (iOS toggles the same way and never blanks), so the text stays visible.
         if context.coordinator.showLineNumbersChanged(showLineNumbers) {
-            scrollView.rulersVisible = showLineNumbers
-            // Retiling the scroll view for the ruler changes the text view's width, but TextKit 2
-            // does not re-lay its viewport for that width change on its own — the glyphs blank out
-            // the instant line numbers are switched on and nothing (scroll, click) brings them back.
-            // Setting `needsLayout`/`needsDisplay` alone doesn't force a re-lay. On the next runloop
-            // tick, AFTER AppKit has tiled the ruler and settled the new contentSize, re-fit the
-            // wrap container to that width and force a full relayout so the text is laid out against
-            // the narrower container instead of vanishing.
-            DispatchQueue.main.async { [weak textView, weak scrollView] in
-                guard let textView, let scrollView,
-                      let layoutManager = textView.textLayoutManager else { return }
-                if let container = textView.textContainer, container.widthTracksTextView {
-                    container.size = NSSize(width: scrollView.contentSize.width,
-                                            height: .greatestFiniteMagnitude)
-                }
-                layoutManager.ensureLayout(for: layoutManager.documentRange)
-                layoutManager.textViewportLayoutController.layoutViewport()
-                textView.needsLayout = true
-                textView.needsDisplay = true
-                scrollView.verticalRulerView?.needsDisplay = true
-            }
+            context.coordinator.gutter?.isHidden = !showLineNumbers
+            var inset = textView.textContainerInset
+            inset.width = showLineNumbers ? MacLineNumberGutter.width : 8
+            textView.textContainerInset = inset
+            context.coordinator.gutter?.needsDisplay = true
+            textView.needsDisplay = true
+        }
+        // Keep the floating gutter sized to the visible height and repainted this pass.
+        if let gutter = context.coordinator.gutter {
+            gutter.frame = NSRect(x: 0, y: 0, width: MacLineNumberGutter.width,
+                                  height: scrollView.contentView.bounds.height)
         }
 
         if textView.string != text {
@@ -232,7 +225,7 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             }
         }
 
-        context.coordinator.ruler?.needsDisplay = true
+        context.coordinator.gutter?.needsDisplay = true
     }
 
     /// Configures soft-wrap vs. horizontal-scroll on the text container. Idempotent: skips the work
@@ -263,7 +256,7 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: MarkdownTextViewRepresentable
         weak var textView: NSTextView?
-        weak var ruler: LineNumberRulerView?
+        weak var gutter: MacLineNumberGutter?
         private let engine = OutlineEngine()
 
         /// The text/style the highlighter last ran over, so the SwiftUI update pass can skip
@@ -398,7 +391,13 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         }
 
         @MainActor @objc private func boundsDidChange(_ notification: Notification) {
-            ruler?.needsDisplay = true
+            // Re-fit the floating gutter to the (possibly resized) visible height and repaint it so
+            // its numbers track the text as it scrolls.
+            if let gutter, let scrollView = textView?.enclosingScrollView {
+                gutter.frame = NSRect(x: 0, y: 0, width: MacLineNumberGutter.width,
+                                      height: scrollView.contentView.bounds.height)
+            }
+            gutter?.needsDisplay = true
         }
 
         /// Records where the pending edit will land (and how long the inserted text is) so the
@@ -465,7 +464,7 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             // Follow the caret as the user types so text added at the bottom isn't clipped.
             textView.scrollRangeToVisible(range)
             textView.needsDisplay = true
-            ruler?.needsDisplay = true
+            gutter?.needsDisplay = true
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
