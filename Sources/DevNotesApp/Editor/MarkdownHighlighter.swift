@@ -68,10 +68,25 @@ struct MarkdownHighlighter {
 
     /// Applies base attributes then the syntax overlays to `storage`. Selection and text are left
     /// untouched — only attribute runs change.
-    func apply(to storage: NSTextStorage) {
+    ///
+    /// `editedRange` scopes the work to just the paragraph(s) an edit touched: **every** pattern
+    /// this highlighter recognises is line-anchored or single-line (headings/lists/quotes/rules are
+    /// `^…$`; code/bold/italic/link all exclude `\n`), so a change on one line can never alter
+    /// another line's colouring. Re-styling only the edited paragraph — instead of `setAttributes`
+    /// over the whole document on every keystroke — is what stops the TextKit 2 viewport from
+    /// blanking newly-typed text on longer notes. Pass `nil` (the default) to re-colour everything
+    /// (load, style/zoom/gutter change, or a full-text replacement).
+    func apply(to storage: NSTextStorage, editedRange: NSRange? = nil) {
         let ns = storage.string as NSString
-        let full = NSRange(location: 0, length: ns.length)
         guard ns.length > 0 else { return }
+
+        let full: NSRange
+        if let editedRange, NSMaxRange(editedRange) <= ns.length {
+            full = ns.paragraphRange(for: editedRange)
+        } else {
+            full = NSRange(location: 0, length: ns.length)
+        }
+        guard full.length > 0 else { return }
 
         let body = applier.bodyAttributes(from: style)
         storage.setAttributes(body, range: full)
@@ -85,7 +100,7 @@ struct MarkdownHighlighter {
         // --- Block markers (per line) ---
         // Headings: the whole line — leading #'s and heading text — takes the per-level color,
         // and the heading text gets its heading font.
-        applyRegex(Self.headingPattern, in: ns, storage: storage) { match in
+        applyRegex(Self.headingPattern, in: ns, range: full, storage: storage) { match in
             let markers = match.range(at: 1)
             let color = Self.headingColor(level: markers.length)
             storage.addAttributes([.foregroundColor: color], range: markers)
@@ -102,45 +117,45 @@ struct MarkdownHighlighter {
 
         // Bullet markers: `-`, `*`, `+` followed by a space. The whole matched prefix (indent +
         // marker + trailing space) sets the hanging indent so wrapped text tucks under the marker.
-        applyRegex(Self.bulletPattern, in: ns, storage: storage) { match in
+        applyRegex(Self.bulletPattern, in: ns, range: full, storage: storage) { match in
             storage.addAttribute(.foregroundColor, value: Self.listMarker, range: match.range(at: 1))
             applyHangingIndent(prefixRange: match.range, in: ns, storage: storage, baseFont: baseFont, base: baseParagraph)
         }
         // Numbered markers: `12.` followed by a space.
-        applyRegex(Self.numberedPattern, in: ns, storage: storage) { match in
+        applyRegex(Self.numberedPattern, in: ns, range: full, storage: storage) { match in
             storage.addAttribute(.foregroundColor, value: Self.listMarker, range: match.range(at: 1))
             applyHangingIndent(prefixRange: match.range, in: ns, storage: storage, baseFont: baseFont, base: baseParagraph)
         }
         // Blockquote marker.
-        applyRegex(Self.quotePattern, in: ns, storage: storage) { match in
+        applyRegex(Self.quotePattern, in: ns, range: full, storage: storage) { match in
             storage.addAttribute(.foregroundColor, value: Self.quoteColor, range: match.range(at: 1))
         }
         // Thematic break (`---`, `***`, `___`) — dim the whole line so the real rule drawn over it
         // (macOS) reads cleanly, and iOS still gets a distinct divider colour.
-        applyRegex(Self.thematicBreakPattern, in: ns, storage: storage) { match in
+        applyRegex(Self.thematicBreakPattern, in: ns, range: full, storage: storage) { match in
             storage.addAttribute(.foregroundColor, value: Self.quoteColor, range: match.range)
         }
 
         // --- Inline spans ---
         // Inline code `like this` — teal + monospaced.
-        applyRegex(Self.codePattern, in: ns, storage: storage) { match in
+        applyRegex(Self.codePattern, in: ns, range: full, storage: storage) { match in
             storage.addAttributes([
                 .foregroundColor: Self.codeColor,
                 .font: Self.monospaced(baseFont)
             ], range: match.range)
         }
         // Bold **text** or __text__ — bold trait, dim markers.
-        applyRegex(Self.boldPattern, in: ns, storage: storage) { match in
+        applyRegex(Self.boldPattern, in: ns, range: full, storage: storage) { match in
             storage.addAttribute(.font, value: Self.bold(baseFont), range: match.range(at: 2))
             colorMarkers(around: match, group: 2, color: Self.emphasisMarker, in: storage)
         }
         // Italic *text* or _text_ — italic trait. Lookarounds avoid matching inside ** ** runs.
-        applyRegex(Self.italicPattern, in: ns, storage: storage) { match in
+        applyRegex(Self.italicPattern, in: ns, range: full, storage: storage) { match in
             storage.addAttribute(.font, value: Self.italic(baseFont), range: match.range(at: 2))
             colorMarkers(around: match, group: 2, color: Self.emphasisMarker, in: storage)
         }
         // Links [text](url) — color the visible text.
-        applyRegex(Self.linkPattern, in: ns, storage: storage) { match in
+        applyRegex(Self.linkPattern, in: ns, range: full, storage: storage) { match in
             storage.addAttribute(.foregroundColor, value: Self.linkColor, range: match.range(at: 1))
         }
     }
@@ -173,11 +188,12 @@ struct MarkdownHighlighter {
     private func applyRegex(
         _ regex: NSRegularExpression?,
         in ns: NSString,
+        range: NSRange,
         storage: NSTextStorage,
         body: (NSTextCheckingResult) -> Void
     ) {
         guard let regex else { return }
-        regex.enumerateMatches(in: ns as String, range: NSRange(location: 0, length: ns.length)) { match, _, _ in
+        regex.enumerateMatches(in: ns as String, range: range) { match, _, _ in
             if let match { body(match) }
         }
     }

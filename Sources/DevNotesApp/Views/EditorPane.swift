@@ -42,8 +42,29 @@ struct EditorPane: View {
                         return model.perform(action)
                     }
                 )
+                Divider()
+                EditorStatusBar(text: model.editor.text)
             }
         }
+    }
+}
+
+/// The bottom counter strip: live word + line totals for the open note, mirroring the top outline
+/// toolbar's inset/divider layout. Counts come from the pure `TextStats`; this view holds no logic.
+private struct EditorStatusBar: View {
+    var text: String
+
+    var body: some View {
+        let stats = DevNotesCore.TextStats(text)
+        HStack(spacing: 14) {
+            Spacer()
+            Text("\(stats.words) \(stats.words == 1 ? "word" : "words")")
+            Text("\(stats.lines) \(stats.lines == 1 ? "line" : "lines")")
+        }
+        .font(.caption.monospacedDigit())
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
     }
 }
 

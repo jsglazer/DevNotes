@@ -139,19 +139,34 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
         }
 
+        // Toggling the gutter must run BEFORE `applyWrapping`: showing the ruler narrows the text
+        // view by `ruleThickness`, so the soft-wrap container has to be re-sized against the new
+        // (post-ruler) content width in the same pass. Doing it here — rather than at the end —
+        // also stops the text from blanking out when line numbers are switched on: the viewport is
+        // forced to re-tile against the new geometry instead of showing a stale (empty) layout.
+        if context.coordinator.showLineNumbersChanged(showLineNumbers) {
+            scrollView.rulersVisible = showLineNumbers
+            context.coordinator.invalidateHighlight()
+            DispatchQueue.main.async { [weak textView] in
+                textView?.textLayoutManager?.textViewportLayoutController.layoutViewport()
+                textView?.needsDisplay = true
+            }
+        }
+
         if textView.string != text {
-            textView.string = text
-            // Resetting the string wipes attribute runs — re-colour is mandatory.
+            // A model-driven text change (outline command, find/replace) reassigns the whole string,
+            // which snaps the scroll to the top and wipes attribute runs. Pin the scroll offset
+            // across the swap so a toolbar action can't fling the view — the "toolbar causes massive
+            // jumping / text disappears" report.
+            context.coordinator.preservingScroll(of: scrollView) {
+                textView.string = text
+            }
             context.coordinator.invalidateHighlight()
         }
         applyWrapping(to: textView, in: scrollView, coordinator: context.coordinator)
 
         if textView.isContinuousSpellCheckingEnabled != spellCheck {
             textView.isContinuousSpellCheckingEnabled = spellCheck
-        }
-        // Toggling the gutter must never change the note's font colour.
-        if context.coordinator.showLineNumbersChanged(showLineNumbers) {
-            context.coordinator.invalidateHighlight()
         }
 
         textView.typingAttributes = StyleApplier(zoom: CGFloat(zoom)).bodyAttributes(from: style)
@@ -187,7 +202,6 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             }
         }
 
-        scrollView.rulersVisible = showLineNumbers
         context.coordinator.ruler?.needsDisplay = true
     }
 
@@ -233,6 +247,11 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         /// True while find-match backgrounds are painted, so we only pay to clear them when some
         /// were actually applied (never on the ordinary typing path with the bar closed).
         private var hasSearchHighlight = false
+
+        /// The character range an in-progress edit will land on (from `shouldChangeText`), so the
+        /// following `textDidChange` re-colours only the edited paragraph(s) instead of the whole
+        /// note. `nil` means "range unknown" → fall back to a full re-colour.
+        private var pendingEditRange: NSRange?
 
         /// Last wrap mode + width applied to the container, so `applyWrapping` can skip redundant
         /// (relayout-inducing) reconfiguration on every observable update.
@@ -347,6 +366,15 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             ruler?.needsDisplay = true
         }
 
+        /// Records where the pending edit will land (and how long the inserted text is) so the
+        /// `textDidChange` that follows can re-colour only the affected paragraph(s). Always returns
+        /// true — this observes, it never blocks the edit.
+        func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange, replacementString: String?) -> Bool {
+            let insertedLength = (replacementString as NSString?)?.length ?? 0
+            pendingEditRange = NSRange(location: affectedCharRange.location, length: insertedLength)
+            return true
+        }
+
         /// Intercepts Return to continue (or exit) a list marker via the pure `OutlineEngine`,
         /// so bullets and numbered items auto-continue on the next line.
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
@@ -378,16 +406,22 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             parent.text = textView.string
             let range = textView.selectedRange()
             parent.selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
+            // Re-colour only the paragraph(s) this edit touched (see `MarkdownHighlighter.apply`).
+            // Colouring the whole document on every keystroke re-laid the entire TextKit 2 viewport,
+            // which on longer notes left freshly-typed glyphs unrendered until a relayout (Return) —
+            // the "text disappears after ~500 words until Return is pressed" report.
+            let editedRange = pendingEditRange
+            pendingEditRange = nil
             if let storage = textView.textStorage {
-                // Pin the scroll position across the full-document re-colour, then follow the caret
-                // ourselves — so re-colouring never jumps the view, but typing at the bottom still
-                // keeps the caret on-screen.
+                // Pin the scroll position across the re-colour, then follow the caret ourselves — so
+                // re-colouring never jumps the view, but typing at the bottom still keeps the caret
+                // on-screen.
                 if let scrollView = textView.enclosingScrollView {
                     preservingScroll(of: scrollView) {
-                        MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: storage)
+                        MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: storage, editedRange: editedRange)
                     }
                 } else {
-                    MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: storage)
+                    MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: storage, editedRange: editedRange)
                 }
                 didHighlight(text: textView.string, style: parent.style)
             }
@@ -455,6 +489,7 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         textView.inputAccessoryView = accessory
         let container = EditorContainerView(textView: textView)
         context.coordinator.container = container
+        context.coordinator.startObservingKeyboard()
         return container
     }
 
@@ -465,11 +500,10 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         if textView.spellCheckingType != desiredSpellCheck {
             textView.spellCheckingType = desiredSpellCheck
         }
-        // Scroll-past-end room so the caret on the last line clears the keyboard/bottom edge.
-        let bottomInset = CGFloat(max(0, bottomPadding))
-        if textView.contentInset.bottom != bottomInset {
-            textView.contentInset.bottom = bottomInset
-        }
+        // Scroll-past-end room so the caret on the last line clears the keyboard/bottom edge. Uses
+        // whichever is larger — the configured padding or the current keyboard overlap — so a SwiftUI
+        // refresh mid-typing can't wipe the keyboard inset.
+        context.coordinator.applyBottomInset()
         // A text mismatch here means the model changed the text out-of-band (an outline command,
         // find/replace) — assigning `.text` resets the scroll position and selection, which was the
         // "screen jumps / goes blank after a menu command" report. Pin the scroll offset across the
@@ -532,8 +566,72 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         private var lastZoom: Double?
         private var lastFocusRequest = 0
 
+        /// The character range an in-progress edit will land on (from `shouldChangeText`), so the
+        /// following `textViewDidChange` re-colours only the edited paragraph(s). `nil` → full pass.
+        private var pendingEditRange: NSRange?
+
+        /// How far the keyboard currently overlaps the editor (points). Combined with the note's
+        /// configured bottom padding so the last lines can always scroll clear of the keyboard.
+        var keyboardOverlap: CGFloat = 0
+
         func needsHighlight(text: String, style: StyleSheet) -> Bool {
             highlightedText != text || highlightedStyle != style
+        }
+
+        /// Sets the text view's bottom scroll-past-end inset to whichever is larger: the note's
+        /// configured `bottomPadding`, or the height the keyboard currently covers. Called from both
+        /// the keyboard handler and `updateUIView` so a SwiftUI refresh can't wipe the keyboard inset.
+        func applyBottomInset() {
+            guard let textView = container?.textView else { return }
+            let bottom = max(CGFloat(max(0, parent.bottomPadding)), keyboardOverlap)
+            if textView.contentInset.bottom != bottom {
+                textView.contentInset.bottom = bottom
+                textView.verticalScrollIndicatorInsets.bottom = bottom
+            }
+        }
+
+        /// Subscribes to keyboard-frame changes so the editor can inset itself out from under the
+        /// keyboard and keep the caret visible — without this the last lines slid behind the keyboard
+        /// with no way to scroll them back into view.
+        func startObservingKeyboard() {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(keyboardFrameWillChange(_:)),
+                name: UIResponder.keyboardWillChangeFrameNotification,
+                object: nil
+            )
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(keyboardWillHide(_:)),
+                name: UIResponder.keyboardWillHideNotification,
+                object: nil
+            )
+        }
+
+        @objc private func keyboardFrameWillChange(_ note: Notification) {
+            guard let textView = container?.textView,
+                  let window = textView.window,
+                  let value = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue else { return }
+            // Keyboard frame arrives in screen coordinates; bring it into the window, then measure how
+            // much it covers of the text view's on-screen frame.
+            let keyboardFrame = window.convert(value.cgRectValue, from: window.screen.coordinateSpace)
+            let textFrame = textView.convert(textView.bounds, to: window)
+            keyboardOverlap = max(0, textFrame.maxY - keyboardFrame.minY)
+            applyBottomInset()
+            scrollCaretToVisible(in: textView)
+        }
+
+        @objc private func keyboardWillHide(_ note: Notification) {
+            keyboardOverlap = 0
+            applyBottomInset()
+        }
+
+        /// Scrolls the caret's rect into view above the keyboard after an inset change.
+        private func scrollCaretToVisible(in textView: UITextView) {
+            guard let selectedRange = textView.selectedTextRange else { return }
+            let caret = textView.caretRect(for: selectedRange.end)
+            guard caret.isNull == false, caret.isInfinite == false else { return }
+            textView.scrollRectToVisible(caret.insetBy(dx: 0, dy: -8), animated: true)
         }
 
         func zoomChanged(_ value: Double) -> Bool {
@@ -567,9 +665,18 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
 
         init(_ parent: MarkdownTextViewRepresentable) { self.parent = parent }
 
+        deinit {
+            NotificationCenter.default.removeObserver(self)
+        }
+
         /// Intercepts Return to continue (or exit) a list marker via the pure `OutlineEngine`.
         func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
-            guard text == "\n" else { return true }
+            guard text == "\n" else {
+                // Record where non-newline input lands so `textViewDidChange` re-colours only the
+                // edited paragraph(s) rather than the whole note on every keystroke.
+                pendingEditRange = NSRange(location: range.location, length: (text as NSString).length)
+                return true
+            }
             let selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
             let edit = engine.insertNewline(text: textView.text, selection: selection)
             let offset = textView.contentOffset
@@ -596,15 +703,21 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
             // duplicated spaces ("extra spaces after voice-to-text"); defer the colour pass until
             // composition commits and this fires again with no marked range.
             guard textView.markedTextRange == nil else {
+                // Mid-composition: defer colouring until commit, and force that commit to re-colour
+                // in full (the small pending range no longer maps onto the finished text).
+                pendingEditRange = nil
                 container?.refreshOverlays()
                 return
             }
-            // Re-colouring rewrites every attribute run, which re-lays the TextKit 2 viewport and can
-            // shove the scroll position once the note is taller than the screen — the "screen jumps /
-            // goes blank while typing past ~25 lines" report. Pin the scroll offset across the pass so
-            // typing never moves the view out from under the caret.
+            // Re-colour only the paragraph(s) this edit touched (see `MarkdownHighlighter.apply`).
+            // Colouring the whole note on every keystroke re-laid the entire TextKit 2 viewport and,
+            // past ~500 words, left freshly-typed glyphs unrendered until a relayout — the "typed
+            // text disappears until Return" report. Pin the scroll offset across the pass so typing
+            // never moves the view out from under the caret.
+            let editedRange = pendingEditRange
+            pendingEditRange = nil
             let offset = textView.contentOffset
-            MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: textView.textStorage)
+            MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: textView.textStorage, editedRange: editedRange)
             didHighlight(text: textView.text, style: parent.style)
             if textView.contentOffset != offset {
                 textView.setContentOffset(offset, animated: false)
