@@ -42,23 +42,33 @@ final class LineNumberRulerView: NSRulerView {
             .foregroundColor: NSColor.secondaryLabelColor
         ]
 
+        // Number only the fragments the viewport has ALREADY laid out. The old enumeration from
+        // the document start with `.ensuresLayout` forced a full-document layout on every gutter
+        // redraw — i.e. on every keystroke and scroll tick while line numbers were on — which is
+        // what made the editor text vanish whenever the gutter was enabled.
+        guard let viewport = layoutManager.textViewportLayoutController.viewportRange else { return }
+
         let string = textView.string as NSString
         let inset = textView.textContainerInset.height
         let yOffset = convert(NSPoint.zero, from: textView).y
         let documentStart = contentManager.documentRange.location
 
-        layoutManager.enumerateTextLayoutFragments(
-            from: contentManager.documentRange.location,
-            options: [.ensuresLayout]
-        ) { fragment in
+        // Advance the line count fragment-to-fragment instead of rescanning the whole prefix for
+        // each fragment (the old `substring(to:).reduce` was O(document) per visible line).
+        var lineNumber = 1
+        var countedTo = 0
+        layoutManager.enumerateTextLayoutFragments(from: viewport.location, options: []) { fragment in
+            guard fragment.rangeInElement.location.compare(viewport.endLocation) == .orderedAscending else {
+                return false
+            }
+            let offset = min(contentManager.offset(from: documentStart, to: fragment.rangeInElement.location), string.length)
+            lineNumber += string.newlineCount(in: NSRange(location: countedTo, length: max(0, offset - countedTo)))
+            countedTo = max(countedTo, offset)
+
             let fragmentFrame = fragment.layoutFragmentFrame
             let y = yOffset + fragmentFrame.minY + inset
-
             // Only draw fragments that fall within the dirty rect.
             if y + fragmentFrame.height >= rect.minY, y <= rect.maxY {
-                let offset = contentManager.offset(from: documentStart, to: fragment.rangeInElement.location)
-                let lineNumber = string.substring(to: min(offset, string.length))
-                    .reduce(1) { $0 + ($1 == "\n" ? 1 : 0) }
                 let label = "\(lineNumber)" as NSString
                 let size = label.size(withAttributes: attributes)
                 label.draw(

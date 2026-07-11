@@ -39,7 +39,8 @@ final class EditorTextView: NSTextView {
     private func drawCurrentLineHighlight(in dirtyRect: NSRect) {
         guard let color = currentLineHighlight,
               let layoutManager = textLayoutManager,
-              let contentManager = layoutManager.textContentManager else { return }
+              let contentManager = layoutManager.textContentManager,
+              let viewport = layoutManager.textViewportLayoutController.viewportRange else { return }
         let ns = string as NSString
         let caret = min(selectedRange().location, ns.length)
         let lineRange = ns.lineRange(for: NSRange(location: caret, length: 0))
@@ -47,7 +48,13 @@ final class EditorTextView: NSTextView {
         let documentStart = contentManager.documentRange.location
 
         color.setFill()
-        layoutManager.enumerateTextLayoutFragments(from: documentStart, options: [.ensuresLayout]) { fragment in
+        // Walk only the fragments the viewport has ALREADY laid out. Enumerating from the document
+        // start with `.ensuresLayout` forced a full-document layout on every redraw (every caret
+        // move/blink) — the layout storm behind the random scroll jumps while typing.
+        layoutManager.enumerateTextLayoutFragments(from: viewport.location, options: []) { fragment in
+            guard fragment.rangeInElement.location.compare(viewport.endLocation) == .orderedAscending else {
+                return false
+            }
             let offset = contentManager.offset(from: documentStart, to: fragment.rangeInElement.location)
             guard offset <= ns.length else { return true }
             // The fragment whose line range contains the caret is the caret's line.
@@ -65,7 +72,8 @@ final class EditorTextView: NSTextView {
 
     private func drawThematicBreaks(in dirtyRect: NSRect) {
         guard let layoutManager = textLayoutManager,
-              let contentManager = layoutManager.textContentManager else { return }
+              let contentManager = layoutManager.textContentManager,
+              let viewport = layoutManager.textViewportLayoutController.viewportRange else { return }
 
         let ns = string as NSString
         guard ns.length > 0 else { return }
@@ -75,8 +83,14 @@ final class EditorTextView: NSTextView {
 
         // A 1-pt `separatorColor` hairline was effectively invisible against the editor background,
         // so `---` looked like it produced no rule. Draw a clearly visible mid-grey line instead.
+        // Enumeration is viewport-scoped and never forces layout: the old whole-document
+        // `.ensuresLayout` walk on every redraw destabilised fragment frames mid-draw, which is why
+        // a freshly typed `---` rule could appear and immediately vanish.
         NSColor.secondaryLabelColor.setStroke()
-        layoutManager.enumerateTextLayoutFragments(from: documentStart, options: [.ensuresLayout]) { fragment in
+        layoutManager.enumerateTextLayoutFragments(from: viewport.location, options: []) { fragment in
+            guard fragment.rangeInElement.location.compare(viewport.endLocation) == .orderedAscending else {
+                return false
+            }
             let frame = fragment.layoutFragmentFrame
             let y = frame.midY + origin.y
             // Draw only fragments intersecting the redraw region, but keep enumerating downward

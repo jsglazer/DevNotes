@@ -141,14 +141,14 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
 
         // Toggling the gutter must run BEFORE `applyWrapping`: showing the ruler narrows the text
         // view by `ruleThickness`, so the soft-wrap container has to be re-sized against the new
-        // (post-ruler) content width in the same pass. Doing it here — rather than at the end —
-        // also stops the text from blanking out when line numbers are switched on: the viewport is
-        // forced to re-tile against the new geometry instead of showing a stale (empty) layout.
+        // (post-ruler) content width in the same pass. The toggle does NOT re-highlight: showing
+        // the ruler leaves attribute runs untouched, and the full-document `setAttributes` a
+        // re-highlight runs is exactly what blanked the viewport ("text disappears when line
+        // numbers are turned on").
         if context.coordinator.showLineNumbersChanged(showLineNumbers) {
             scrollView.rulersVisible = showLineNumbers
-            context.coordinator.invalidateHighlight()
             DispatchQueue.main.async { [weak textView] in
-                textView?.textLayoutManager?.textViewportLayoutController.layoutViewport()
+                textView?.needsLayout = true
                 textView?.needsDisplay = true
             }
         }
@@ -186,7 +186,14 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
 
         let desired = NSRange(location: selection.location, length: selection.length)
-        if textView.selectedRange() != desired, NSMaxRange(desired) <= fullRange.length {
+        // `lastReportedSelection` guard: SwiftUI update passes can lag the delegate callbacks, so
+        // a fast typist's binding value may describe where the caret WAS one keystroke ago.
+        // Re-applying that stale echo snapped the caret (and scroll) backwards — one source of the
+        // "screen randomly jumps while typing" report. Only a selection the view didn't itself
+        // report (an outline command, find/replace, open-at-last-line) is applied here.
+        if textView.selectedRange() != desired,
+           selection != context.coordinator.lastReportedSelection,
+           NSMaxRange(desired) <= fullRange.length {
             textView.setSelectedRange(desired)
             // Keep the caret on-screen after a command-driven selection change (move line,
             // select-to-edge, open-at-last-line) — the view no longer scrolls it off the bottom.
@@ -263,6 +270,11 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         private var lastCurrentLineHighlight: PlatformColor?
         private var didApplyCurrentLineHighlight = false
         private var lastZoom: Double?
+
+        /// The selection this view itself last reported through the delegate callbacks, so the
+        /// SwiftUI update pass can tell a stale binding echo from a real model-driven selection
+        /// change and never snap the caret backwards mid-typing.
+        var lastReportedSelection: DevNotesCore.TextSelection?
 
         func needsHighlight(text: String, style: StyleSheet) -> Bool {
             highlightedText != text || highlightedStyle != style
@@ -376,28 +388,28 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         }
 
         /// Intercepts Return to continue (or exit) a list marker via the pure `OutlineEngine`,
-        /// so bullets and numbered items auto-continue on the next line.
+        /// so bullets and numbered items auto-continue on the next line. A plain newline (no
+        /// marker involved) falls through to AppKit's native insertion, and a list edit is applied
+        /// as the smallest possible replacement — the old code replaced the WHOLE string on every
+        /// Return, re-laying the entire TextKit 2 viewport and lurching the scroll each time.
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             guard commandSelector == #selector(NSResponder.insertNewline(_:)) else { return false }
             let range = textView.selectedRange()
             let selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
             let edit = engine.insertNewline(text: textView.string, selection: selection)
 
-            let full = NSRange(location: 0, length: (textView.string as NSString).length)
-            if textView.shouldChangeText(in: full, replacementString: edit.text) {
-                textView.textStorage?.replaceCharacters(in: full, with: edit.text)
+            let plain = (textView.string as NSString).replacingCharacters(in: range, with: "\n")
+            if edit.text == plain, edit.selection == .caret(range.location + 1) { return false }
+
+            guard let change = TextDiff.minimalEdit(from: textView.string, to: edit.text) else { return true }
+            // The `shouldChangeText`/`didChangeText` pair keeps undo working and routes through
+            // `textDidChange`, which updates the bindings and re-colours just the edited lines.
+            if textView.shouldChangeText(in: change.range, replacementString: change.replacement) {
+                textView.textStorage?.replaceCharacters(in: change.range, with: change.replacement)
                 textView.didChangeText()
             }
             textView.setSelectedRange(NSRange(location: edit.selection.location, length: edit.selection.length))
-            parent.text = edit.text
-            parent.selection = edit.selection
-            if let storage = textView.textStorage {
-                MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: storage)
-                didHighlight(text: edit.text, style: parent.style)
-            }
             textView.scrollRangeToVisible(textView.selectedRange())
-            textView.needsDisplay = true
-            ruler?.needsDisplay = true
             return true
         }
 
@@ -405,7 +417,9 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             guard let textView = notification.object as? NSTextView else { return }
             parent.text = textView.string
             let range = textView.selectedRange()
-            parent.selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
+            let reported = DevNotesCore.TextSelection(location: range.location, length: range.length)
+            lastReportedSelection = reported
+            parent.selection = reported
             // Re-colour only the paragraph(s) this edit touched (see `MarkdownHighlighter.apply`).
             // Colouring the whole document on every keystroke re-laid the entire TextKit 2 viewport,
             // which on longer notes left freshly-typed glyphs unrendered until a relayout (Return) —
@@ -434,7 +448,9 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             let range = textView.selectedRange()
-            parent.selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
+            let reported = DevNotesCore.TextSelection(location: range.location, length: range.length)
+            lastReportedSelection = reported
+            parent.selection = reported
             // Repaint so the current-line band follows the caret to its new line.
             if parent.currentLineHighlight != nil { textView.needsDisplay = true }
         }
@@ -490,6 +506,12 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         let container = EditorContainerView(textView: textView)
         context.coordinator.container = container
         context.coordinator.startObservingKeyboard()
+        // Re-measure the keyboard overlap whenever the container is re-laid: SwiftUI's own keyboard
+        // avoidance can resize the editor AFTER the keyboard notification fired, and an inset based
+        // on the stale pre-layout frame double-counted the keyboard (text scrolled up past the top).
+        container.onLayout = { [weak coordinator = context.coordinator] in
+            coordinator?.applyBottomInset()
+        }
         return container
     }
 
@@ -516,10 +538,6 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
             context.coordinator.invalidateHighlight()
             didResetText = true
         }
-        // Toggling the gutter must never change the note's font colour.
-        if context.coordinator.showLineNumbersChanged(showLineNumbers) {
-            context.coordinator.invalidateHighlight()
-        }
         // A zoom change must re-run the (font-sizing) syntax pass over the whole note.
         if context.coordinator.zoomChanged(zoom) {
             context.coordinator.invalidateHighlight()
@@ -534,7 +552,12 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
 
         let length = (textView.text as NSString).length
         let desired = NSRange(location: selection.location, length: selection.length)
-        if NSMaxRange(desired) <= length {
+        // Only apply a selection the view didn't itself report (outline command, open-note jump):
+        // re-applying the binding's stale echo of a fast typist's caret snapped it backwards and
+        // triggered UIKit's own caret auto-scroll — more mid-typing jumping.
+        if textView.selectedRange != desired,
+           selection != context.coordinator.lastReportedSelection,
+           NSMaxRange(desired) <= length {
             textView.selectedRange = desired
         }
         if didResetText, textView.contentOffset != preservedOffset {
@@ -560,27 +583,45 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         /// re-highlighting content the delegate callbacks already styled.
         private var highlightedText: String?
         private var highlightedStyle: StyleSheet?
-        /// Last-seen gutter state, so a line-number toggle can force a re-colour.
-        private var lastShowLineNumbers: Bool?
         /// Last-seen zoom + focus token so a change forces a re-colour / focus grab exactly once.
         private var lastZoom: Double?
         private var lastFocusRequest = 0
+
+        /// The selection this view itself last reported through the delegate callbacks, so the
+        /// SwiftUI update pass can tell a stale binding echo from a real model-driven selection
+        /// change and never snap the caret backwards mid-typing.
+        var lastReportedSelection: DevNotesCore.TextSelection?
 
         /// The character range an in-progress edit will land on (from `shouldChangeText`), so the
         /// following `textViewDidChange` re-colours only the edited paragraph(s). `nil` → full pass.
         private var pendingEditRange: NSRange?
 
-        /// How far the keyboard currently overlaps the editor (points). Combined with the note's
-        /// configured bottom padding so the last lines can always scroll clear of the keyboard.
-        var keyboardOverlap: CGFloat = 0
+        /// The keyboard's frame in screen coordinates from the most recent frame-change
+        /// notification, or nil while it's hidden. The overlap is re-derived from this at every
+        /// layout pass rather than captured once: SwiftUI's keyboard avoidance can resize the
+        /// editor after the notification fires, and a frozen overlap then double-counted the
+        /// keyboard — the "text scrolls up beyond the top edge" report.
+        private var keyboardScreenFrame: CGRect?
+
+        /// How far the keyboard currently overlaps the editor (points), measured against the text
+        /// view's LIVE frame.
+        private var keyboardOverlap: CGFloat {
+            guard let keyboardScreenFrame,
+                  let textView = container?.textView,
+                  let window = textView.window else { return 0 }
+            let keyboardFrame = window.convert(keyboardScreenFrame, from: window.screen.coordinateSpace)
+            let textFrame = textView.convert(textView.bounds, to: window)
+            return max(0, textFrame.maxY - keyboardFrame.minY)
+        }
 
         func needsHighlight(text: String, style: StyleSheet) -> Bool {
             highlightedText != text || highlightedStyle != style
         }
 
         /// Sets the text view's bottom scroll-past-end inset to whichever is larger: the note's
-        /// configured `bottomPadding`, or the height the keyboard currently covers. Called from both
-        /// the keyboard handler and `updateUIView` so a SwiftUI refresh can't wipe the keyboard inset.
+        /// configured `bottomPadding`, or the height the keyboard currently covers. Called from the
+        /// keyboard handler, `updateUIView`, and the container's layout pass, so neither a SwiftUI
+        /// refresh nor a post-keyboard resize can leave a stale inset behind.
         func applyBottomInset() {
             guard let textView = container?.textView else { return }
             let bottom = max(CGFloat(max(0, parent.bottomPadding)), keyboardOverlap)
@@ -609,29 +650,25 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         }
 
         @objc private func keyboardFrameWillChange(_ note: Notification) {
-            guard let textView = container?.textView,
-                  let window = textView.window,
-                  let value = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue else { return }
-            // Keyboard frame arrives in screen coordinates; bring it into the window, then measure how
-            // much it covers of the text view's on-screen frame.
-            let keyboardFrame = window.convert(value.cgRectValue, from: window.screen.coordinateSpace)
-            let textFrame = textView.convert(textView.bounds, to: window)
-            keyboardOverlap = max(0, textFrame.maxY - keyboardFrame.minY)
+            guard let value = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue else { return }
+            keyboardScreenFrame = value.cgRectValue
             applyBottomInset()
-            scrollCaretToVisible(in: textView)
+            if let textView = container?.textView {
+                scrollCaretToVisible(in: textView, animated: true)
+            }
         }
 
         @objc private func keyboardWillHide(_ note: Notification) {
-            keyboardOverlap = 0
+            keyboardScreenFrame = nil
             applyBottomInset()
         }
 
         /// Scrolls the caret's rect into view above the keyboard after an inset change.
-        private func scrollCaretToVisible(in textView: UITextView) {
+        private func scrollCaretToVisible(in textView: UITextView, animated: Bool) {
             guard let selectedRange = textView.selectedTextRange else { return }
             let caret = textView.caretRect(for: selectedRange.end)
             guard caret.isNull == false, caret.isInfinite == false else { return }
-            textView.scrollRectToVisible(caret.insetBy(dx: 0, dy: -8), animated: true)
+            textView.scrollRectToVisible(caret.insetBy(dx: 0, dy: -8), animated: animated)
         }
 
         func zoomChanged(_ value: Double) -> Bool {
@@ -656,13 +693,6 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
             highlightedText = nil
         }
 
-        /// True when the gutter visibility changed since the last update (and records the new
-        /// value). Toggling line numbers must not leave the note text in the default colour.
-        func showLineNumbersChanged(_ value: Bool) -> Bool {
-            defer { lastShowLineNumbers = value }
-            return lastShowLineNumbers != value
-        }
-
         init(_ parent: MarkdownTextViewRepresentable) { self.parent = parent }
 
         deinit {
@@ -670,6 +700,11 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         }
 
         /// Intercepts Return to continue (or exit) a list marker via the pure `OutlineEngine`.
+        /// A plain newline (no marker involved) goes through UIKit's native insertion — the path
+        /// that never disturbs the scroll — and a list edit is applied as the smallest possible
+        /// replacement. The old code reassigned `.text` wholesale, which re-laid the entire
+        /// document and snapped the scroll to the top before the pin put it back: the "screen
+        /// flashes up and back down on Return" report.
         func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
             guard text == "\n" else {
                 // Record where non-newline input lands so `textViewDidChange` re-colours only the
@@ -679,17 +714,26 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
             }
             let selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
             let edit = engine.insertNewline(text: textView.text, selection: selection)
-            let offset = textView.contentOffset
-            textView.text = edit.text
-            textView.typingAttributes = StyleApplier(zoom: CGFloat(parent.zoom)).bodyAttributes(from: parent.style)
-            MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: textView.textStorage)
-            didHighlight(text: edit.text, style: parent.style)
+
+            let plain = (textView.text as NSString).replacingCharacters(in: range, with: "\n")
+            if edit.text == plain, edit.selection == .caret(range.location + 1) {
+                pendingEditRange = NSRange(location: range.location, length: 1)
+                return true
+            }
+
+            guard let change = TextDiff.minimalEdit(from: textView.text, to: edit.text) else { return false }
+            textView.textStorage.replaceCharacters(in: change.range, with: change.replacement)
             textView.selectedRange = NSRange(location: edit.selection.location, length: edit.selection.length)
-            // Resetting `.text` snaps the scroll to the top; pin it so list-continuation on Return
-            // doesn't jump the view (worse on longer notes).
-            if textView.contentOffset != offset { textView.setContentOffset(offset, animated: false) }
-            parent.text = edit.text
+            textView.typingAttributes = StyleApplier(zoom: CGFloat(parent.zoom)).bodyAttributes(from: parent.style)
+            // Storage-level edits bypass `textViewDidChange`, so do its work here, scoped to the
+            // paragraphs the replacement touched.
+            let recolour = NSRange(location: change.range.location, length: (change.replacement as NSString).length)
+            MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: textView.textStorage, editedRange: recolour)
+            didHighlight(text: textView.text, style: parent.style)
+            parent.text = textView.text
             parent.selection = edit.selection
+            lastReportedSelection = edit.selection
+            scrollCaretToVisible(in: textView, animated: false)
             container?.refreshOverlays()
             return false
         }
@@ -697,7 +741,9 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
             let range = textView.selectedRange
-            parent.selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
+            let reported = DevNotesCore.TextSelection(location: range.location, length: range.length)
+            lastReportedSelection = reported
+            parent.selection = reported
             // Don't re-apply attributes while the system is mid-composition (dictation / IME marked
             // text). Rewriting the storage under a live dictation session both jumped the view and
             // duplicated spaces ("extra spaces after voice-to-text"); defer the colour pass until
@@ -727,7 +773,9 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
 
         func textViewDidChangeSelection(_ textView: UITextView) {
             let range = textView.selectedRange
-            parent.selection = DevNotesCore.TextSelection(location: range.location, length: range.length)
+            let reported = DevNotesCore.TextSelection(location: range.location, length: range.length)
+            lastReportedSelection = reported
+            parent.selection = reported
             // Move the current-line band to the caret's new line.
             container?.refreshOverlays()
         }
@@ -749,6 +797,9 @@ final class EditorContainerView: UIView {
     /// Underlay (behind the clear-backed text view) that fills the caret's line with a band.
     let currentLineView: IOSCurrentLineOverlay
     private let gutterWidth: CGFloat = 40
+    /// Called after each layout pass so the coordinator can re-measure the keyboard overlap
+    /// against the view's LIVE frame (SwiftUI may resize the editor after the keyboard shows).
+    var onLayout: (() -> Void)?
 
     var showLineNumbers = false {
         didSet {
@@ -803,6 +854,7 @@ final class EditorContainerView: UIView {
         currentLineView.frame = bounds
         gutter.frame = CGRect(x: 0, y: 0, width: gutterWidth, height: bounds.height)
         refreshOverlays()
+        onLayout?()
     }
 }
 
@@ -827,7 +879,8 @@ final class IOSCurrentLineOverlay: UIView {
     override func draw(_ rect: CGRect) {
         guard let color, let textView,
               let layoutManager = textView.textLayoutManager,
-              let contentManager = layoutManager.textContentManager else { return }
+              let contentManager = layoutManager.textContentManager,
+              let viewport = layoutManager.textViewportLayoutController.viewportRange else { return }
         let ns = textView.text as NSString
         let caret = min(textView.selectedRange.location, ns.length)
         let lineRange = ns.lineRange(for: NSRange(location: caret, length: 0))
@@ -836,7 +889,14 @@ final class IOSCurrentLineOverlay: UIView {
         let documentStart = contentManager.documentRange.location
 
         color.setFill()
-        layoutManager.enumerateTextLayoutFragments(from: documentStart, options: [.ensuresLayout]) { fragment in
+        // Walk only the fragments the viewport has ALREADY laid out. Enumerating from the document
+        // start with `.ensuresLayout` forced a full-document layout on every redraw — and this
+        // overlay redraws on every keystroke, caret move, and scroll tick, which is what kept the
+        // scroll position churning.
+        layoutManager.enumerateTextLayoutFragments(from: viewport.location, options: []) { fragment in
+            guard fragment.rangeInElement.location.compare(viewport.endLocation) == .orderedAscending else {
+                return false
+            }
             let offset = contentManager.offset(from: documentStart, to: fragment.rangeInElement.location)
             guard offset <= ns.length else { return true }
             let fragmentLine = ns.lineRange(for: NSRange(location: min(offset, ns.length), length: 0))
@@ -871,7 +931,8 @@ final class IOSThematicBreakOverlay: UIView {
     override func draw(_ rect: CGRect) {
         guard let textView,
               let layoutManager = textView.textLayoutManager,
-              let contentManager = layoutManager.textContentManager
+              let contentManager = layoutManager.textContentManager,
+              let viewport = layoutManager.textViewportLayoutController.viewportRange
         else { return }
 
         let ns = textView.text as NSString
@@ -884,9 +945,15 @@ final class IOSThematicBreakOverlay: UIView {
 
         // A 1-pt `.separator` hairline was effectively invisible, so `---` looked like it produced no
         // rule. Draw a clearly visible mid-grey line instead, snapped to the device pixel grid.
+        // Enumeration is viewport-scoped and never forces layout: the old whole-document
+        // `.ensuresLayout` walk destabilised fragment frames mid-draw, which is why a freshly typed
+        // `---` rule could appear and immediately vanish.
         let scale = traitCollection.displayScale > 0 ? traitCollection.displayScale : 2
         UIColor.secondaryLabel.setStroke()
-        layoutManager.enumerateTextLayoutFragments(from: documentStart, options: [.ensuresLayout]) { fragment in
+        layoutManager.enumerateTextLayoutFragments(from: viewport.location, options: []) { fragment in
+            guard fragment.rangeInElement.location.compare(viewport.endLocation) == .orderedAscending else {
+                return false
+            }
             let frame = fragment.layoutFragmentFrame
             let y = frame.midY + insetTop - offsetY
             guard y >= rect.minY - 1, y <= rect.maxY + 1 else { return true }
@@ -943,22 +1010,30 @@ final class IOSLineNumberGutter: UIView {
             .foregroundColor: UIColor.secondaryLabel
         ]
 
+        // Number only the fragments the viewport has ALREADY laid out — the old enumeration from
+        // the document start with `.ensuresLayout` forced a full-document layout on every redraw
+        // (each keystroke and scroll tick while the gutter was on). Advance the line count from
+        // one fragment to the next instead of rescanning the whole prefix per fragment.
+        guard let viewport = layoutManager.textViewportLayoutController.viewportRange else { return }
+
         let string = textView.text as NSString
         let insetTop = textView.textContainerInset.top
         let offsetY = textView.contentOffset.y
         let documentStart = contentManager.documentRange.location
 
-        layoutManager.enumerateTextLayoutFragments(
-            from: contentManager.documentRange.location,
-            options: [.ensuresLayout]
-        ) { fragment in
+        var lineNumber = 1
+        var countedTo = 0
+        layoutManager.enumerateTextLayoutFragments(from: viewport.location, options: []) { fragment in
+            guard fragment.rangeInElement.location.compare(viewport.endLocation) == .orderedAscending else {
+                return false
+            }
+            let offset = min(contentManager.offset(from: documentStart, to: fragment.rangeInElement.location), string.length)
+            lineNumber += string.newlineCount(in: NSRange(location: countedTo, length: max(0, offset - countedTo)))
+            countedTo = max(countedTo, offset)
+
             let fragmentFrame = fragment.layoutFragmentFrame
             let y = fragmentFrame.minY + insetTop - offsetY
-
             if y + fragmentFrame.height >= rect.minY, y <= rect.maxY {
-                let offset = contentManager.offset(from: documentStart, to: fragment.rangeInElement.location)
-                let lineNumber = string.substring(to: min(offset, string.length))
-                    .reduce(1) { $0 + ($1 == "\n" ? 1 : 0) }
                 let label = "\(lineNumber)" as NSString
                 let size = label.size(withAttributes: attributes)
                 label.draw(
