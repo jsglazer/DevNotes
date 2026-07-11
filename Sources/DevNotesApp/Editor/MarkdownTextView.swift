@@ -87,6 +87,13 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
         textView.isGrammarCheckingEnabled = false
+        // Smart-dash / smart-quote substitution rewrites the very characters Markdown depends on:
+        // typing `--` becomes an em-dash, so `---` never forms a thematic break ("the second dash
+        // collapses into a single dash"), and straight quotes turn curly inside code. These are
+        // SEPARATE from text replacement above, so they must be disabled explicitly — otherwise a
+        // typed rule fails while a pasted one (substitution never runs on paste) renders fine.
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
         // The text view must NOT paint its own (opaque) background: it draws right over the
         // current-line band `draw(_:)` lays down first, which was why the highlight never appeared.
         // The scroll view supplies the editor background instead, so the band shows behind the text.
@@ -147,9 +154,25 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         // numbers are turned on").
         if context.coordinator.showLineNumbersChanged(showLineNumbers) {
             scrollView.rulersVisible = showLineNumbers
-            DispatchQueue.main.async { [weak textView] in
-                textView?.needsLayout = true
-                textView?.needsDisplay = true
+            // Retiling the scroll view for the ruler changes the text view's width, but TextKit 2
+            // does not re-lay its viewport for that width change on its own — the glyphs blank out
+            // the instant line numbers are switched on and nothing (scroll, click) brings them back.
+            // Setting `needsLayout`/`needsDisplay` alone doesn't force a re-lay. On the next runloop
+            // tick, AFTER AppKit has tiled the ruler and settled the new contentSize, re-fit the
+            // wrap container to that width and force a full relayout so the text is laid out against
+            // the narrower container instead of vanishing.
+            DispatchQueue.main.async { [weak textView, weak scrollView] in
+                guard let textView, let scrollView,
+                      let layoutManager = textView.textLayoutManager else { return }
+                if let container = textView.textContainer, container.widthTracksTextView {
+                    container.size = NSSize(width: scrollView.contentSize.width,
+                                            height: .greatestFiniteMagnitude)
+                }
+                layoutManager.ensureLayout(for: layoutManager.documentRange)
+                layoutManager.textViewportLayoutController.layoutViewport()
+                textView.needsLayout = true
+                textView.needsDisplay = true
+                scrollView.verticalRulerView?.needsDisplay = true
             }
         }
 
@@ -486,6 +509,13 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         textView.delegate = context.coordinator
         textView.autocorrectionType = .no
         textView.spellCheckingType = spellCheck ? .yes : .no
+        // Smart dashes turn a typed `--` into an em-dash, so `---` never becomes a thematic break
+        // ("the second dash collapses into a single dash"); smart quotes rewrite straight quotes in
+        // code. Both are separate from autocorrection above, so disable them explicitly — pasted
+        // Markdown skips substitution and renders fine, but typed Markdown needs these off to match.
+        textView.smartDashesType = .no
+        textView.smartQuotesType = .no
+        textView.smartInsertDeleteType = .no
         textView.textContainerInset = UIEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
         textView.backgroundColor = .clear
         // Keyboard-dismiss button pinned above the keyboard. A SwiftUI `.toolbar(placement:.keyboard)`
