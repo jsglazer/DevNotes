@@ -101,6 +101,14 @@ struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            Section("Highlight Similar") {
+                ColorPicker("Highlight colour", selection: hexBinding(\.similarHighlightColorHex), supportsOpacity: false)
+                Text("The background colour used by the toolbar's highlighter button to mark every occurrence of the selected text.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Section("Insert Date & Time") {
                 TextField("Format", text: $model.dateFormat)
                     .font(.body.monospaced())

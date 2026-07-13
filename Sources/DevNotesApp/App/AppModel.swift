@@ -40,6 +40,7 @@ private enum PreferenceKey {
     static let highlightCurrentLine = "devnotes.highlightCurrentLine"
     static let currentLineLight = "devnotes.currentLineLight"
     static let currentLineDark = "devnotes.currentLineDark"
+    static let similarHighlightColor = "devnotes.similarHighlightColor"
 }
 
 /// Zoom bounds and step for the editor/sidebar text scale (⌘+ / ⌘- / ⌘0).
@@ -114,6 +115,14 @@ public final class AppModel {
     public var highlightCurrentLine = false { didSet { defaults.set(highlightCurrentLine, forKey: PreferenceKey.highlightCurrentLine) } }
     public var currentLineColorLight = "#FFF6C2" { didSet { defaults.set(currentLineColorLight, forKey: PreferenceKey.currentLineLight) } }
     public var currentLineColorDark = "#3A3B22" { didSet { defaults.set(currentLineColorDark, forKey: PreferenceKey.currentLineDark) } }
+
+    /// Whether the "Highlight Similar" toolbar button is active. While true, every occurrence of
+    /// the currently selected text is highlighted across the open note. Session-only (like Find's
+    /// `isPresented`) — it always starts off on launch.
+    public var highlightSimilarActive = false
+    /// Background colour painted over occurrences the "Highlight Similar" button finds. Persisted
+    /// as a `#rrggbb` hex, same as the current-line colours.
+    public var similarHighlightColorHex = "#FFE08A" { didSet { defaults.set(similarHighlightColorHex, forKey: PreferenceKey.similarHighlightColor) } }
 
     /// User-configurable keyboard shortcuts, loaded once at launch from `~/.config/devnotes/keymap.json`
     /// (seeded with the defaults on first run). The View menu, editor key handling, and the Settings
@@ -217,6 +226,9 @@ public final class AppModel {
         }
         if let raw = defaults.string(forKey: PreferenceKey.currentLineDark), raw.isEmpty == false {
             currentLineColorDark = raw
+        }
+        if let raw = defaults.string(forKey: PreferenceKey.similarHighlightColor), raw.isEmpty == false {
+            similarHighlightColorHex = raw
         }
         // iCloud copy wins when present (it's the cross-device source of truth); otherwise fall back
         // to the local list so a first launch offline still shows the device's own pins.
@@ -545,6 +557,30 @@ public final class AppModel {
         return PlatformColor(hex: hex)
     }
 
+    // MARK: - Highlight Similar
+
+    public func toggleHighlightSimilar() {
+        highlightSimilarActive.toggle()
+    }
+
+    /// Every occurrence of the current selection's text in the open note, or empty when the
+    /// highlight is off or the selection is empty/blank. Recomputed live as the selection changes
+    /// while the highlight is active, so moving the caret to a new word updates what's painted.
+    public var similarMatches: [DevNotesCore.TextSelection] {
+        guard highlightSimilarActive, editor.selection.isCaret == false else { return [] }
+        let ns = editor.text as NSString
+        guard editor.selection.end <= ns.length else { return [] }
+        let selected = ns.substring(with: NSRange(location: editor.selection.location, length: editor.selection.length))
+        guard selected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else { return [] }
+        return SearchEngine.matchRanges(editor.text, query: selected, options: SearchOptions(caseSensitive: false))
+    }
+
+    /// The "Highlight Similar" background colour, or nil when the highlight is off.
+    public var similarHighlightColor: PlatformColor? {
+        guard highlightSimilarActive else { return nil }
+        return PlatformColor(hex: similarHighlightColorHex)
+    }
+
     // MARK: - Sidebar
 
     public func toggleSidebar() {
@@ -649,6 +685,14 @@ public final class AppModel {
     }
 
     // MARK: - Conflicts
+
+    /// The full on-disk path for a note, or nil when there's no watched directory (tests/previews
+    /// using an in-memory repository). Surfaced in the conflict-resolution header so it's clear
+    /// exactly which file — and, since the notes directory is the iCloud ubiquity container in
+    /// production, which sync location — is being reconciled.
+    public func fullPath(for id: NoteID) -> String? {
+        watchDirectory?.appendingPathComponent(id.rawValue).path
+    }
 
     public func resolveConflict(_ id: NoteID, mergedBody: String) async {
         try? await sync.resolve(id, mergedBody: mergedBody)

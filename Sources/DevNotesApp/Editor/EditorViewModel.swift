@@ -29,6 +29,12 @@ public final class EditorViewModel {
     /// file's modified date and re-sorts the list even though the user changed nothing.
     private var isLoadingContent = false
 
+    /// Bumped every time `load` replaces the text wholesale (opening/switching notes, an external
+    /// file change landing) as opposed to an in-place edit. The editor surface uses this to tell a
+    /// note switch — which must reset the `NSTextView`/`UITextView` undo stack — from a same-note,
+    /// model-driven edit (outline command, find/replace) that should still register on it.
+    public private(set) var loadGeneration = 0
+
     public init(text: String = "", selection: TextSelection = .caret(0), style: StyleSheet = StyleSheet()) {
         self.text = text
         self.selection = selection
@@ -52,6 +58,7 @@ public final class EditorViewModel {
         self.text = text
         self.selection = selection
         isLoadingContent = false
+        loadGeneration += 1
     }
 
     /// Replaces the current selection (or inserts at the caret) with `string`, leaving the caret

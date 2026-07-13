@@ -8,6 +8,9 @@ struct EditorToolbar: View {
     /// Icon point size. iOS passes a larger value (~20% up) so the pinned tools are comfortably
     /// tappable; macOS uses the system default.
     var iconSize: CGFloat?
+    /// Whether the "Highlight Similar" toggle is currently active.
+    var isHighlightSimilarActive: Bool
+    var onToggleHighlightSimilar: () -> Void
 
     var body: some View {
         HStack(spacing: iconSize == nil ? 12 : 18) {
@@ -30,6 +33,8 @@ struct EditorToolbar: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
+            Divider().frame(height: 16)
+            toggleButton("highlighter", "Highlight Similar", isOn: isHighlightSimilarActive, action: onToggleHighlightSimilar)
             Spacer()
         }
         .padding(.horizontal, iconSize == nil ? 8 : 12)
@@ -40,6 +45,18 @@ struct EditorToolbar: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(iconSize.map { .system(size: $0) })
+        }
+        .buttonStyle(.borderless)
+        .help(title)
+    }
+
+    /// Same as `button`, but tints the glyph while `isOn` so an active toggle (Highlight Similar)
+    /// reads differently from the momentary outline actions around it.
+    private func toggleButton(_ systemImage: String, _ title: String, isOn: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(iconSize.map { .system(size: $0) })
+                .foregroundStyle(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.primary))
         }
         .buttonStyle(.borderless)
         .help(title)

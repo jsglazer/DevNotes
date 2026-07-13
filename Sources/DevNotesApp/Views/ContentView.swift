@@ -62,7 +62,7 @@ struct ContentView: View {
             await model.startSyncIfNeeded()
         }
         .sheet(item: firstConflict) { conflict in
-            MergeView(conflict: conflict) { mergedBody in
+            MergeView(conflict: conflict, filePath: model.fullPath(for: conflict.id) ?? conflict.id.rawValue) { mergedBody in
                 Task { await model.resolveConflict(conflict.id, mergedBody: mergedBody) }
             }
             .frame(minWidth: 640, minHeight: 420)
@@ -135,7 +135,7 @@ struct ContentView: View {
                 await model.startSyncIfNeeded()
             }
             .sheet(item: firstConflict) { conflict in
-                MergeView(conflict: conflict) { mergedBody in
+                MergeView(conflict: conflict, filePath: model.fullPath(for: conflict.id) ?? conflict.id.rawValue) { mergedBody in
                     Task { await model.resolveConflict(conflict.id, mergedBody: mergedBody) }
                 }
             }

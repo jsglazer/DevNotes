@@ -6,6 +6,9 @@ import SwiftUI
 /// the merged body through `AppModel`, so the captured versions are surfaced, never discarded.
 struct MergeView: View {
     let conflict: ConflictRecord
+    /// The full on-disk path of the conflicted note, or its raw ID when no path is known (an
+    /// in-memory repository in tests/previews).
+    var filePath: String
     var onResolve: (String) -> Void
 
     private let engine = DiffMergeEngine()
@@ -25,11 +28,18 @@ struct MergeView: View {
     }
 
     private var header: some View {
-        HStack {
+        VStack(alignment: .leading, spacing: 2) {
             Text("Resolve conflict — \(conflict.id.rawValue)")
                 .font(.headline)
-            Spacer()
+            Text(filePath)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            Text("Mine: \(conflict.mine.deviceName) · Theirs: \(conflict.theirs.deviceName)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
     }
 

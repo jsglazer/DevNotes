@@ -25,8 +25,16 @@ struct MarkdownTextView: View {
     /// (highlighted strongly). macOS only; empty/nil elsewhere.
     var searchMatches: [DevNotesCore.TextSelection] = []
     var currentMatch: DevNotesCore.TextSelection?
+    /// Every occurrence of the current selection's text, painted with `similarHighlightColor`
+    /// when the "Highlight Similar" toolbar button is active. Independent of Find's matches.
+    var similarMatches: [DevNotesCore.TextSelection] = []
+    var similarHighlightColor: PlatformColor?
     /// Bumped by the model to ask the editor to take keyboard focus (new/opened note).
     var focusRequest = 0
+    /// Bumped by the model every time the text was replaced wholesale (opening/switching notes),
+    /// as opposed to an in-place edit — tells the editor surface when to reset the undo stack
+    /// instead of registering the change as an undoable edit.
+    var loadGeneration = 0
     /// Resolves a pressed key chord to a keymap action; returns true when handled so the editor
     /// consumes the event. Provided by the shell (macOS only); iOS ignores it.
     var onKeyChord: (@MainActor (DevNotesCore.KeyChord) -> Bool)?
@@ -44,7 +52,10 @@ struct MarkdownTextView: View {
             bottomPadding: bottomPadding,
             searchMatches: searchMatches,
             currentMatch: currentMatch,
+            similarMatches: similarMatches,
+            similarHighlightColor: similarHighlightColor,
             focusRequest: focusRequest,
+            loadGeneration: loadGeneration,
             onKeyChord: onKeyChord
         )
     }
@@ -65,7 +76,10 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
     var bottomPadding: Double
     var searchMatches: [DevNotesCore.TextSelection]
     var currentMatch: DevNotesCore.TextSelection?
+    var similarMatches: [DevNotesCore.TextSelection]
+    var similarHighlightColor: PlatformColor?
     var focusRequest: Int
+    var loadGeneration: Int
     var onKeyChord: (@MainActor (DevNotesCore.KeyChord) -> Bool)?
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -169,13 +183,31 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
                                   height: scrollView.contentView.bounds.height)
         }
 
+        // Consumed every pass (not just when the string differs) so a load that happens to leave
+        // the text unchanged doesn't leave this flag pending and misattribute a later, genuine
+        // edit as a note switch.
+        let isNoteLoad = context.coordinator.loadGenerationChanged(loadGeneration)
         if textView.string != text {
-            // A model-driven text change (outline command, find/replace) reassigns the whole string,
-            // which snaps the scroll to the top and wipes attribute runs. Pin the scroll offset
-            // across the swap so a toolbar action can't fling the view — the "toolbar causes massive
-            // jumping / text disappears" report.
+            // A model-driven text change reassigns the whole string, which snaps the scroll to the
+            // top and wipes attribute runs. Pin the scroll offset across the swap so a toolbar
+            // action can't fling the view — the "toolbar causes massive jumping / text disappears"
+            // report.
             context.coordinator.preservingScroll(of: scrollView) {
-                textView.string = text
+                if isNoteLoad {
+                    // Opening/switching notes: a hard reset is correct here, but it must also drop
+                    // any undo history from the note that was just closed — otherwise Cmd-Z in the
+                    // newly-opened note could replay edits from a completely different file.
+                    textView.string = text
+                    textView.undoManager?.removeAllActions()
+                } else {
+                    // A same-note model edit (outline command, find/replace, insert date/time) must
+                    // go through shouldChangeText/didChangeText — the pairing AppKit's own undo
+                    // manager relies on — instead of a raw `.string =` reset, which registered no
+                    // undo action for the edit AND desynced the undo manager's notion of the text
+                    // storage generation, breaking Cmd-Z for everything after it (the "Undo doesn't
+                    // work" report).
+                    context.coordinator.applyModelTextChange(to: textView, newText: text)
+                }
             }
             context.coordinator.invalidateHighlight()
         }
@@ -198,7 +230,12 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             }
             context.coordinator.didHighlight(text: textView.string, style: style)
         }
-        context.coordinator.applySearchHighlight(matches: searchMatches, current: currentMatch)
+        context.coordinator.applyHighlights(
+            searchMatches: searchMatches,
+            currentMatch: currentMatch,
+            similarMatches: similarMatches,
+            similarColor: similarHighlightColor
+        )
         let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
 
         let desired = NSRange(location: selection.location, length: selection.length)
@@ -267,9 +304,15 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         private var lastShowLineNumbers: Bool?
         /// Last-honoured focus token, so a note open focuses the editor exactly once per bump.
         private var lastFocusRequest = 0
-        /// True while find-match backgrounds are painted, so we only pay to clear them when some
-        /// were actually applied (never on the ordinary typing path with the bar closed).
-        private var hasSearchHighlight = false
+        /// True while find-match or "Highlight Similar" backgrounds are painted, so we only pay to
+        /// clear them when something was actually applied (never on the ordinary typing path with
+        /// both features off).
+        private var hasHighlight = false
+
+        /// Last-seen load generation, so a note switch (as opposed to a same-note model edit) is
+        /// detected exactly once per bump and clears the undo stack instead of registering an undo
+        /// action for what would otherwise look like one giant text replacement.
+        private var lastLoadGeneration = 0
 
         /// The character range an in-progress edit will land on (from `shouldChangeText`), so the
         /// following `textDidChange` re-colours only the edited paragraph(s) instead of the whole
@@ -336,24 +379,58 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             return lastFocusRequest != value
         }
 
-        /// Paints a faint background over every Find match and a stronger one over the current
-        /// match. Cleared and repainted each pass so a changed query/cursor stays in sync; skipped
-        /// entirely when there's nothing to show and nothing was shown last time.
+        /// True when the load generation changed since the last update (and records the new value).
+        /// A change means the text was just replaced wholesale (opening/switching notes) rather
+        /// than edited in place.
+        func loadGenerationChanged(_ value: Int) -> Bool {
+            defer { lastLoadGeneration = value }
+            return lastLoadGeneration != value
+        }
+
+        /// Applies a model-driven, same-note text change (outline command, toolbar action,
+        /// find/replace, insert date/time) as the smallest possible `shouldChangeText`/
+        /// `didChangeText` edit — the pairing AppKit's own edits use to register undo — instead of
+        /// a raw `textView.string =` reset, so it lands on the undo stack like a normal keystroke.
         @MainActor
-        func applySearchHighlight(matches: [DevNotesCore.TextSelection], current: DevNotesCore.TextSelection?) {
+        func applyModelTextChange(to textView: NSTextView, newText: String) {
+            guard let change = TextDiff.minimalEdit(from: textView.string, to: newText) else { return }
+            if textView.shouldChangeText(in: change.range, replacementString: change.replacement) {
+                textView.textStorage?.replaceCharacters(in: change.range, with: change.replacement)
+                textView.didChangeText()
+            }
+        }
+
+        /// Paints a faint background over every Find match, a stronger one over the current match,
+        /// and `similarColor` over every "Highlight Similar" match. Cleared and repainted each pass
+        /// so a changed query/cursor/selection stays in sync; skipped entirely when there's nothing
+        /// to show and nothing was shown last time.
+        @MainActor
+        func applyHighlights(
+            searchMatches: [DevNotesCore.TextSelection],
+            currentMatch: DevNotesCore.TextSelection?,
+            similarMatches: [DevNotesCore.TextSelection],
+            similarColor: PlatformColor?
+        ) {
             guard let storage = textView?.textStorage else { return }
-            guard matches.isEmpty == false || hasSearchHighlight else { return }
+            guard searchMatches.isEmpty == false || similarMatches.isEmpty == false || hasHighlight else { return }
             let full = NSRange(location: 0, length: storage.length)
             storage.removeAttribute(.backgroundColor, range: full)
             let all = NSColor.systemYellow.withAlphaComponent(0.35)
             let focused = NSColor.systemOrange.withAlphaComponent(0.6)
-            for match in matches {
+            for match in searchMatches {
                 let range = NSRange(location: match.location, length: match.length)
                 guard NSMaxRange(range) <= storage.length else { continue }
-                let color = (match == current) ? focused : all
+                let color = (match == currentMatch) ? focused : all
                 storage.addAttribute(.backgroundColor, value: color, range: range)
             }
-            hasSearchHighlight = matches.isEmpty == false
+            if let similarColor {
+                for match in similarMatches {
+                    let range = NSRange(location: match.location, length: match.length)
+                    guard NSMaxRange(range) <= storage.length else { continue }
+                    storage.addAttribute(.backgroundColor, value: similarColor, range: range)
+                }
+            }
+            hasHighlight = searchMatches.isEmpty == false || similarMatches.isEmpty == false
         }
 
         func didHighlight(text: String, style: StyleSheet) {
@@ -495,7 +572,15 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
     /// Accepted for signature parity with macOS; the Find bar is macOS-only, so iOS ignores these.
     var searchMatches: [DevNotesCore.TextSelection]
     var currentMatch: DevNotesCore.TextSelection?
+    /// Every occurrence of the current selection's text, painted with `similarHighlightColor`
+    /// when the "Highlight Similar" toolbar button is active.
+    var similarMatches: [DevNotesCore.TextSelection]
+    var similarHighlightColor: PlatformColor?
     var focusRequest: Int
+    /// Bumped by the model every time the text was replaced wholesale (opening/switching notes),
+    /// as opposed to an in-place edit — tells the editor surface when to reset the undo stack
+    /// instead of registering the change as an undoable edit.
+    var loadGeneration: Int
     /// Accepted for signature parity with macOS; iOS uses hardware-keyboard commands elsewhere and
     /// does not route key events through the keymap here.
     var onKeyChord: (@MainActor (DevNotesCore.KeyChord) -> Bool)?
@@ -561,8 +646,24 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         // reset so the view stays put.
         let preservedOffset = textView.contentOffset
         var didResetText = false
+        // Consumed every pass (not just when the text differs) so a load that happens to leave the
+        // text unchanged doesn't leave this flag pending and misattribute a later, genuine edit as
+        // a note switch.
+        let isNoteLoad = context.coordinator.loadGenerationChanged(loadGeneration)
         if textView.text != text {
-            textView.text = text
+            if isNoteLoad {
+                // Opening/switching notes: a hard reset is correct here, but it must also drop any
+                // undo history from the note that was just closed — otherwise Cmd-Z / shake-to-undo
+                // in the newly-opened note could replay edits from a completely different file.
+                textView.text = text
+                textView.undoManager?.removeAllActions()
+            } else {
+                // A same-note model edit (outline command, find/replace, insert date/time) must go
+                // through `replace(_:withText:)` — UIKit's text-replacement entry point — instead of
+                // a raw `.text =` reset, which registered no undo action for the edit (the "Undo
+                // doesn't work" report).
+                context.coordinator.applyModelTextChange(to: textView, newText: text)
+            }
             // Resetting the string wipes attribute runs — re-colour is mandatory.
             context.coordinator.invalidateHighlight()
             didResetText = true
@@ -578,6 +679,7 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
             MarkdownHighlighter(style: style, zoom: CGFloat(zoom)).apply(to: textView.textStorage)
             context.coordinator.didHighlight(text: textView.text, style: style)
         }
+        context.coordinator.applySimilarHighlight(matches: similarMatches, color: similarHighlightColor)
 
         let length = (textView.text as NSString).length
         let desired = NSRange(location: selection.location, length: selection.length)
@@ -631,6 +733,15 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         /// editor after the notification fires, and a frozen overlap then double-counted the
         /// keyboard — the "text scrolls up beyond the top edge" report.
         private var keyboardScreenFrame: CGRect?
+
+        /// Last-seen load generation, so a note switch (as opposed to a same-note model edit) is
+        /// detected exactly once per bump and clears the undo stack instead of registering an undo
+        /// action for what would otherwise look like one giant text replacement.
+        private var lastLoadGeneration = 0
+
+        /// True while "Highlight Similar" backgrounds are painted, so we only pay to clear them
+        /// when some were actually applied.
+        private var hasSimilarHighlight = false
 
         /// How far the keyboard currently overlaps the editor (points), measured against the text
         /// view's LIVE frame.
@@ -708,6 +819,47 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         func focusRequestChanged(_ value: Int) -> Bool {
             defer { lastFocusRequest = value }
             return lastFocusRequest != value
+        }
+
+        /// True when the load generation changed since the last update (and records the new value).
+        /// A change means the text was just replaced wholesale (opening/switching notes) rather
+        /// than edited in place.
+        func loadGenerationChanged(_ value: Int) -> Bool {
+            defer { lastLoadGeneration = value }
+            return lastLoadGeneration != value
+        }
+
+        /// Applies a model-driven, same-note text change (outline command, toolbar action,
+        /// find/replace, insert date/time) via `replace(_:withText:)` — UIKit's text-replacement
+        /// entry point — instead of a raw `.text =` reset, so it registers on the undo stack
+        /// instead of being invisible to Cmd-Z / shake-to-undo.
+        @MainActor
+        func applyModelTextChange(to textView: UITextView, newText: String) {
+            guard let change = TextDiff.minimalEdit(from: textView.text, to: newText),
+                  let start = textView.position(from: textView.beginningOfDocument, offset: change.range.location),
+                  let end = textView.position(from: start, offset: change.range.length),
+                  let range = textView.textRange(from: start, to: end)
+            else { return }
+            textView.replace(range, withText: change.replacement)
+        }
+
+        /// Paints `color` over every "Highlight Similar" match. Cleared and repainted each pass so a
+        /// changed selection stays in sync; skipped entirely when there's nothing to show and
+        /// nothing was shown last time.
+        @MainActor
+        func applySimilarHighlight(matches: [DevNotesCore.TextSelection], color: PlatformColor?) {
+            guard matches.isEmpty == false || hasSimilarHighlight else { return }
+            guard let storage = container?.textView.textStorage else { return }
+            let full = NSRange(location: 0, length: storage.length)
+            storage.removeAttribute(.backgroundColor, range: full)
+            if let color {
+                for match in matches {
+                    let range = NSRange(location: match.location, length: match.length)
+                    guard NSMaxRange(range) <= storage.length else { continue }
+                    storage.addAttribute(.backgroundColor, value: color, range: range)
+                }
+            }
+            hasSimilarHighlight = matches.isEmpty == false
         }
 
         func didHighlight(text: String, style: StyleSheet) {

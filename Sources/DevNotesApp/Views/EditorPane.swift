@@ -13,7 +13,11 @@ struct EditorPane: View {
                 ContentUnavailablePlaceholder()
             } else {
                 #if os(macOS)
-                EditorToolbar(editor: model.editor)
+                EditorToolbar(
+                    editor: model.editor,
+                    isHighlightSimilarActive: model.highlightSimilarActive,
+                    onToggleHighlightSimilar: model.toggleHighlightSimilar
+                )
                 Divider()
                 if model.find.isPresented {
                     FindReplaceBar(model: model)
@@ -21,7 +25,12 @@ struct EditorPane: View {
                 }
                 #else
                 // iOS keeps the outline formatting tools pinned on-screen (not behind a sheet).
-                EditorToolbar(editor: model.editor, iconSize: 20)
+                EditorToolbar(
+                    editor: model.editor,
+                    iconSize: 20,
+                    isHighlightSimilarActive: model.highlightSimilarActive,
+                    onToggleHighlightSimilar: model.toggleHighlightSimilar
+                )
                 Divider()
                 #endif
                 MarkdownTextView(
@@ -36,7 +45,10 @@ struct EditorPane: View {
                     bottomPadding: model.bottomPadding,
                     searchMatches: model.find.isPresented ? model.find.matches : [],
                     currentMatch: model.find.isPresented ? model.find.currentMatch : nil,
+                    similarMatches: model.similarMatches,
+                    similarHighlightColor: model.similarHighlightColor,
                     focusRequest: model.editor.focusRequest,
+                    loadGeneration: model.editor.loadGeneration,
                     onKeyChord: { chord in
                         guard let action = model.keymap.action(for: chord) else { return false }
                         return model.perform(action)
