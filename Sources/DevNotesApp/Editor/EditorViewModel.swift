@@ -50,6 +50,16 @@ public final class EditorViewModel {
         focusRequest += 1
     }
 
+    /// Monotonic counter the editor surface observes: each bump performs one undo step on the
+    /// native text view's undo manager. Drives the mobile toolbar's Undo button, which has no
+    /// other path to the `UITextView`'s undo stack.
+    public private(set) var undoRequest = 0
+
+    /// Asks the editor surface to undo the last edit on the next update pass.
+    public func requestUndo() {
+        undoRequest += 1
+    }
+
     /// Loads note content for display WITHOUT triggering `onChange`/save. Use this whenever the
     /// text is being populated from disk (opening a note, or an external file change landing) so
     /// viewing a note never marks it modified.

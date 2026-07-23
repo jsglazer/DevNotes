@@ -21,6 +21,8 @@ public enum AppTheme: String, CaseIterable, Sendable {
 public enum OpenJump: String, CaseIterable, Sendable {
     case firstLine
     case lastLine
+    /// Return to wherever the caret last was in that note (per-note, persisted).
+    case lastPosition
 }
 
 /// UserDefaults keys for the small set of persisted UI preferences. Notes themselves are never
@@ -41,6 +43,10 @@ private enum PreferenceKey {
     static let currentLineLight = "devnotes.currentLineLight"
     static let currentLineDark = "devnotes.currentLineDark"
     static let similarHighlightColor = "devnotes.similarHighlightColor"
+    static let similarColorLight = "devnotes.similarColorLight"
+    static let similarColorDark = "devnotes.similarColorDark"
+    static let openLinksOnLongPress = "devnotes.openLinksOnLongPress"
+    static let caretPositions = "devnotes.caretPositions"
 }
 
 /// Zoom bounds and step for the editor/sidebar text scale (⌘+ / ⌘- / ⌘0).
@@ -120,9 +126,19 @@ public final class AppModel {
     /// the currently selected text is highlighted across the open note. Session-only (like Find's
     /// `isPresented`) — it always starts off on launch.
     public var highlightSimilarActive = false
-    /// Background colour painted over occurrences the "Highlight Similar" button finds. Persisted
-    /// as a `#rrggbb` hex, same as the current-line colours.
-    public var similarHighlightColorHex = "#FFE08A" { didSet { defaults.set(similarHighlightColorHex, forKey: PreferenceKey.similarHighlightColor) } }
+    /// Background colours painted over occurrences the "Highlight Similar" button finds — one per
+    /// theme (a colour bright enough for light mode washed the text out in dark mode). Persisted as
+    /// `#rrggbb` hex, same as the current-line colours.
+    public var similarColorLight = "#FFE08A" { didSet { defaults.set(similarColorLight, forKey: PreferenceKey.similarColorLight) } }
+    public var similarColorDark = "#6E5A1E" { didSet { defaults.set(similarColorDark, forKey: PreferenceKey.similarColorDark) } }
+
+    /// When true (default), a long press on a URL in the note opens it in the browser (iOS — the
+    /// text view is editable, so links aren't tappable any other way).
+    public var openLinksOnLongPress = true { didSet { defaults.set(openLinksOnLongPress, forKey: PreferenceKey.openLinksOnLongPress) } }
+
+    /// Per-note last caret offset (keyed by raw file name), backing the "Where I left off" On-Open
+    /// jump. Recorded when switching notes and when the app resigns active.
+    @ObservationIgnored private var caretPositions: [String: Int] = [:]
 
     /// User-configurable keyboard shortcuts, loaded once at launch from `~/.config/devnotes/keymap.json`
     /// (seeded with the defaults on first run). The View menu, editor key handling, and the Settings
@@ -227,9 +243,19 @@ public final class AppModel {
         if let raw = defaults.string(forKey: PreferenceKey.currentLineDark), raw.isEmpty == false {
             currentLineColorDark = raw
         }
-        if let raw = defaults.string(forKey: PreferenceKey.similarHighlightColor), raw.isEmpty == false {
-            similarHighlightColorHex = raw
+        // Migration: a single similar-highlight colour stored by earlier versions seeds the
+        // light-theme colour; the dark colour keeps its default until the user picks one.
+        if let raw = defaults.string(forKey: PreferenceKey.similarColorLight)
+            ?? defaults.string(forKey: PreferenceKey.similarHighlightColor), raw.isEmpty == false {
+            similarColorLight = raw
         }
+        if let raw = defaults.string(forKey: PreferenceKey.similarColorDark), raw.isEmpty == false {
+            similarColorDark = raw
+        }
+        if defaults.object(forKey: PreferenceKey.openLinksOnLongPress) != nil {
+            openLinksOnLongPress = defaults.bool(forKey: PreferenceKey.openLinksOnLongPress)
+        }
+        caretPositions = (defaults.dictionary(forKey: PreferenceKey.caretPositions) as? [String: Int]) ?? [:]
         // iCloud copy wins when present (it's the cross-device source of truth); otherwise fall back
         // to the local list so a first launch offline still shows the device's own pins.
         if let cloud = kvStore.array(forKey: PreferenceKey.pinned) as? [String] {
@@ -383,22 +409,68 @@ public final class AppModel {
     // MARK: - Selection & editing
 
     public func select(_ id: NoteID) async {
+        // Leaving a note: remember where the caret was (for "Where I left off"), and delete the
+        // file outright when the user emptied it — empty notes are never kept on disk.
+        if let previous = selectedID, previous != id {
+            rememberCaret(for: previous)
+            await deleteIfEmpty(previous)
+        }
         selectedID = id
         guard let note = try? await repository.load(id) else { return }
         // `load` (not a plain `editor.text =`) so opening a note doesn't schedule a save and
         // re-sort the list — the file's modified date must change only on a real edit.
-        editor.load(text: note.body, selection: caretForOpen(in: note.body))
+        editor.load(text: note.body, selection: openSelection(for: id, in: note.body))
         editor.style = styleSheet
     }
 
+    /// The selection a freshly opened note lands on: the first sidebar-search match when a query is
+    /// active (so search jumps straight to the matching line), else the Settings jump preference.
+    private func openSelection(for id: NoteID, in body: String) -> DevNotesCore.TextSelection {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        if query.isEmpty == false,
+           let match = SearchEngine.matchRanges(body, query: query, options: searchOptions).first {
+            return match
+        }
+        return caretForOpen(in: body, id: id)
+    }
+
     /// Resolves the initial caret for a freshly opened note per the Settings jump preference.
-    private func caretForOpen(in body: String) -> DevNotesCore.TextSelection {
+    private func caretForOpen(in body: String, id: NoteID) -> DevNotesCore.TextSelection {
+        let length = (body as NSString).length
         switch openJump {
         case .firstLine:
             return .caret(0)
         case .lastLine:
-            return .caret((body as NSString).length)
+            return .caret(length)
+        case .lastPosition:
+            return .caret(min(caretPositions[id.rawValue] ?? 0, length))
         }
+    }
+
+    /// Records the current note's caret offset (called from the shell when the app resigns active,
+    /// so the position survives relaunch even without a note switch).
+    public func rememberCurrentCaret() {
+        guard let id = selectedID else { return }
+        rememberCaret(for: id)
+    }
+
+    private func rememberCaret(for id: NoteID) {
+        caretPositions[id.rawValue] = editor.selection.location
+        defaults.set(caretPositions, forKey: PreferenceKey.caretPositions)
+    }
+
+    /// Deletes `id` from disk when the editor left it empty (whitespace-only). Notes emptied by the
+    /// user are removed rather than saved as empty files.
+    private func deleteIfEmpty(_ id: NoteID) async {
+        guard editor.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              summaries.contains(where: { $0.id == id }) else { return }
+        try? await repository.delete(id)
+        caretPositions[id.rawValue] = nil
+        defaults.set(caretPositions, forKey: PreferenceKey.caretPositions)
+        if pinnedIDs.contains(id.rawValue) {
+            setPinned(pinnedIDs.filter { $0 != id.rawValue })
+        }
+        await refresh()
     }
 
     /// Moves selection to the note one row **up** in the visible list (Shift-⌘-↑). No-ops at the
@@ -575,10 +647,11 @@ public final class AppModel {
         return SearchEngine.matchRanges(editor.text, query: selected, options: SearchOptions(caseSensitive: false))
     }
 
-    /// The "Highlight Similar" background colour, or nil when the highlight is off.
-    public var similarHighlightColor: PlatformColor? {
+    /// The "Highlight Similar" background colour for the active theme, or nil when the highlight
+    /// is off.
+    public func similarHighlightColor(for scheme: ColorScheme) -> PlatformColor? {
         guard highlightSimilarActive else { return nil }
-        return PlatformColor(hex: similarHighlightColorHex)
+        return PlatformColor(hex: scheme == .dark ? similarColorDark : similarColorLight)
     }
 
     // MARK: - Sidebar
@@ -602,6 +675,17 @@ public final class AppModel {
     }
 
     private func persist(id: NoteID, body: String) async {
+        // Never write an empty file: a note the user emptied is deleted from disk instead. The
+        // selection is kept — typing again simply recreates the file on the next save.
+        if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            try? await repository.delete(id)
+            if pinnedIDs.contains(id.rawValue) {
+                setPinned(pinnedIDs.filter { $0 != id.rawValue })
+            }
+            if body == editor.text { hasUnsavedEdits = false }
+            await refresh()
+            return
+        }
         let now = Date()
         let existing = try? await repository.load(id)
         let note = Note(id: id, body: body, createdAt: existing?.createdAt ?? now, modifiedAt: now)
@@ -682,6 +766,34 @@ public final class AppModel {
     private func selectCurrentMatch() {
         guard let match = find.currentMatch else { return }
         editor.selection = match
+    }
+
+    // MARK: - Backup
+
+    /// The suggested file name for a backup zip: `DevNotes-Backup-<DTG>.zip` (date-time group).
+    public var backupFileName: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return "DevNotes-Backup-\(formatter.string(from: Date()))"
+    }
+
+    /// Zips the whole notes directory and returns the archive's bytes, or nil when there is no
+    /// on-disk directory (in-memory repository) or the coordination fails. Uses the
+    /// `NSFileCoordinator` `.forUploading` read, which materialises a directory as a zip without
+    /// any third-party archiver.
+    public func createBackupData() -> Data? {
+        guard let directory = watchDirectory else { return nil }
+        var data: Data?
+        var coordinationError: NSError?
+        NSFileCoordinator().coordinate(
+            readingItemAt: directory,
+            options: .forUploading,
+            error: &coordinationError
+        ) { zippedURL in
+            data = try? Data(contentsOf: zippedURL)
+        }
+        return data
     }
 
     // MARK: - Conflicts

@@ -49,6 +49,19 @@ struct MarkdownHighlighter {
         headingLevelColors[min(max(level, 1), headingLevelColors.count) - 1]
     }
 
+    /// List-marker colour: the user's `bullet-color` token when set, else the fixed palette blue.
+    private var bulletColor: PlatformColor {
+        if case let .color(hex)? = style[.bulletColor], let color = PlatformColor(hex: hex) { return color }
+        return Self.listMarker
+    }
+
+    /// Extra vertical space painted before heading lines (`section-spacing` token), scaled with the
+    /// zoom like every other size. Nil when the token is absent.
+    private var sectionSpacingBefore: CGFloat? {
+        if case let .size(value)? = style[.sectionSpacing] { return CGFloat(value) * zoom }
+        return nil
+    }
+
     // MARK: - Compiled patterns
     // Compiled once per process. `apply(to:)` runs on every keystroke, so re-compiling each
     // NSRegularExpression per call was pure overhead on the typing path.
@@ -113,17 +126,24 @@ struct MarkdownHighlighter {
                     storage.addAttributes([.font: headingFont, .foregroundColor: color], range: text)
                 }
             }
+            // `section-spacing` token: breathing room above each heading (paragraph-level, so it
+            // survives wrapping) without the user having to type blank lines.
+            if let spacing = sectionSpacingBefore,
+               let paragraph = baseParagraph.mutableCopy() as? NSMutableParagraphStyle {
+                paragraph.paragraphSpacingBefore = spacing
+                storage.addAttribute(.paragraphStyle, value: paragraph, range: ns.paragraphRange(for: match.range))
+            }
         }
 
         // Bullet markers: `-`, `*`, `+` followed by a space. The whole matched prefix (indent +
         // marker + trailing space) sets the hanging indent so wrapped text tucks under the marker.
         applyRegex(Self.bulletPattern, in: ns, range: full, storage: storage) { match in
-            storage.addAttribute(.foregroundColor, value: Self.listMarker, range: match.range(at: 1))
+            storage.addAttribute(.foregroundColor, value: bulletColor, range: match.range(at: 1))
             applyHangingIndent(prefixRange: match.range, in: ns, storage: storage, baseFont: baseFont, base: baseParagraph)
         }
         // Numbered markers: `12.` followed by a space.
         applyRegex(Self.numberedPattern, in: ns, range: full, storage: storage) { match in
-            storage.addAttribute(.foregroundColor, value: Self.listMarker, range: match.range(at: 1))
+            storage.addAttribute(.foregroundColor, value: bulletColor, range: match.range(at: 1))
             applyHangingIndent(prefixRange: match.range, in: ns, storage: storage, baseFont: baseFont, base: baseParagraph)
         }
         // Blockquote marker.

@@ -24,12 +24,17 @@ struct EditorPane: View {
                     Divider()
                 }
                 #else
-                // iOS keeps the outline formatting tools pinned on-screen (not behind a sheet).
+                // iOS keeps the outline formatting tools pinned on-screen (not behind a sheet),
+                // plus the actions that have no menu bar to live in: undo, date/time, and zoom.
                 EditorToolbar(
                     editor: model.editor,
                     iconSize: 20,
                     isHighlightSimilarActive: model.highlightSimilarActive,
-                    onToggleHighlightSimilar: model.toggleHighlightSimilar
+                    onToggleHighlightSimilar: model.toggleHighlightSimilar,
+                    onInsertDateTime: model.insertDateTime,
+                    onUndo: model.editor.requestUndo,
+                    onZoomOut: model.zoomOut,
+                    onZoomIn: model.zoomIn
                 )
                 Divider()
                 #endif
@@ -46,9 +51,11 @@ struct EditorPane: View {
                     searchMatches: model.find.isPresented ? model.find.matches : [],
                     currentMatch: model.find.isPresented ? model.find.currentMatch : nil,
                     similarMatches: model.similarMatches,
-                    similarHighlightColor: model.similarHighlightColor,
+                    similarHighlightColor: model.similarHighlightColor(for: colorScheme),
                     focusRequest: model.editor.focusRequest,
+                    undoRequest: model.editor.undoRequest,
                     loadGeneration: model.editor.loadGeneration,
+                    openLinksOnLongPress: model.openLinksOnLongPress,
                     onKeyChord: { chord in
                         guard let action = model.keymap.action(for: chord) else { return false }
                         return model.perform(action)
@@ -69,6 +76,8 @@ private struct EditorStatusBar: View {
     var body: some View {
         let stats = DevNotesCore.TextStats(text)
         HStack(spacing: 14) {
+            // App version, bottom-left (moved here from the top bar / window toolbar).
+            Text(AppVersion.display)
             Spacer()
             Text("\(stats.words) \(stats.words == 1 ? "word" : "words")")
             Text("\(stats.lines) \(stats.lines == 1 ? "line" : "lines")")

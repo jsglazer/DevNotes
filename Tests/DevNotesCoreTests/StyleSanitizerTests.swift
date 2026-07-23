@@ -56,4 +56,12 @@ struct StyleSanitizerTests {
         #expect(StyleSanitizer.parseFontWeight("600") == .numeric(600))
         #expect(StyleSanitizer.parseFontWeight("obese") == nil)
     }
+
+    @Test("Bullet color and section spacing tokens are accepted")
+    func parsesBulletColorAndSectionSpacing() {
+        let sheet = StyleSanitizer.sanitize("bullet-color: #ff0000\nsection-spacing: 12")
+        #expect(sheet.tokens[.bulletColor] == .color("#ff0000"))
+        #expect(sheet.tokens[.sectionSpacing] == .size(12))
+        #expect(sheet.rejected.isEmpty)
+    }
 }

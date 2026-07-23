@@ -11,8 +11,24 @@ struct EditorToolbar: View {
     /// Whether the "Highlight Similar" toggle is currently active.
     var isHighlightSimilarActive: Bool
     var onToggleHighlightSimilar: () -> Void
+    /// Mobile-only extras (nil hides the button): insert date/time, undo, and zoom. iOS has no
+    /// menu bar or ⌘-shortcuts, so these actions need on-screen buttons.
+    var onInsertDateTime: (() -> Void)?
+    var onUndo: (() -> Void)?
+    var onZoomOut: (() -> Void)?
+    var onZoomIn: (() -> Void)?
 
     var body: some View {
+        // The iOS button row (larger icons + extra tools) outgrows an iPhone's width, so it
+        // scrolls horizontally; macOS keeps the fixed row.
+        if iconSize == nil {
+            content
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) { content }
+        }
+    }
+
+    private var content: some View {
         HStack(spacing: iconSize == nil ? 12 : 18) {
             button("list.bullet", "Bullet List") { editor.run(.toggleBullet) }
             button("list.number", "Numbered List") { editor.run(.toggleNumber) }
@@ -35,6 +51,21 @@ struct EditorToolbar: View {
             .fixedSize()
             Divider().frame(height: 16)
             toggleButton("highlighter", "Highlight Similar", isOn: isHighlightSimilarActive, action: onToggleHighlightSimilar)
+            if onUndo != nil || onInsertDateTime != nil || onZoomOut != nil || onZoomIn != nil {
+                Divider().frame(height: 16)
+            }
+            if let onUndo {
+                button("arrow.uturn.backward", "Undo", action: onUndo)
+            }
+            if let onInsertDateTime {
+                button("calendar.badge.clock", "Insert Date & Time", action: onInsertDateTime)
+            }
+            if let onZoomOut {
+                button("minus.magnifyingglass", "Zoom Out", action: onZoomOut)
+            }
+            if let onZoomIn {
+                button("plus.magnifyingglass", "Zoom In", action: onZoomIn)
+            }
             Spacer()
         }
         .padding(.horizontal, iconSize == nil ? 8 : 12)

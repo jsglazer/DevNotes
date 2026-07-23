@@ -31,10 +31,16 @@ struct MarkdownTextView: View {
     var similarHighlightColor: PlatformColor?
     /// Bumped by the model to ask the editor to take keyboard focus (new/opened note).
     var focusRequest = 0
+    /// Bumped by the model to perform one undo step on the native undo manager (the mobile
+    /// toolbar's Undo button has no other path to the text view's undo stack).
+    var undoRequest = 0
     /// Bumped by the model every time the text was replaced wholesale (opening/switching notes),
     /// as opposed to an in-place edit — tells the editor surface when to reset the undo stack
     /// instead of registering the change as an undoable edit.
     var loadGeneration = 0
+    /// When true, a long press on a URL opens it in the browser (iOS only — the editable text view
+    /// has no tappable links otherwise).
+    var openLinksOnLongPress = false
     /// Resolves a pressed key chord to a keymap action; returns true when handled so the editor
     /// consumes the event. Provided by the shell (macOS only); iOS ignores it.
     var onKeyChord: (@MainActor (DevNotesCore.KeyChord) -> Bool)?
@@ -55,7 +61,9 @@ struct MarkdownTextView: View {
             similarMatches: similarMatches,
             similarHighlightColor: similarHighlightColor,
             focusRequest: focusRequest,
+            undoRequest: undoRequest,
             loadGeneration: loadGeneration,
+            openLinksOnLongPress: openLinksOnLongPress,
             onKeyChord: onKeyChord
         )
     }
@@ -79,7 +87,9 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
     var similarMatches: [DevNotesCore.TextSelection]
     var similarHighlightColor: PlatformColor?
     var focusRequest: Int
+    var undoRequest: Int
     var loadGeneration: Int
+    var openLinksOnLongPress: Bool
     var onKeyChord: (@MainActor (DevNotesCore.KeyChord) -> Bool)?
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -261,6 +271,10 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
                 window.makeFirstResponder(textView)
             }
         }
+        // A bumped undo token performs one undo step (parity with the iOS toolbar button).
+        if context.coordinator.undoRequestChanged(undoRequest) {
+            textView.undoManager?.undo()
+        }
 
         context.coordinator.gutter?.needsDisplay = true
     }
@@ -377,6 +391,15 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         func focusRequestChanged(_ value: Int) -> Bool {
             defer { lastFocusRequest = value }
             return lastFocusRequest != value
+        }
+
+        /// Last-honoured undo token, so each bump performs exactly one undo step.
+        private var lastUndoRequest = 0
+
+        /// True when the model bumped the undo token since the last pass (records the new value).
+        func undoRequestChanged(_ value: Int) -> Bool {
+            defer { lastUndoRequest = value }
+            return lastUndoRequest != value
         }
 
         /// True when the load generation changed since the last update (and records the new value).
@@ -577,10 +600,14 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
     var similarMatches: [DevNotesCore.TextSelection]
     var similarHighlightColor: PlatformColor?
     var focusRequest: Int
+    /// Bumped by the model to perform one undo step (the pinned toolbar's Undo button).
+    var undoRequest: Int
     /// Bumped by the model every time the text was replaced wholesale (opening/switching notes),
     /// as opposed to an in-place edit — tells the editor surface when to reset the undo stack
     /// instead of registering the change as an undoable edit.
     var loadGeneration: Int
+    /// When true, a long press that lands on a URL opens it in the browser.
+    var openLinksOnLongPress: Bool
     /// Accepted for signature parity with macOS; iOS uses hardware-keyboard commands elsewhere and
     /// does not route key events through the keymap here.
     var onKeyChord: (@MainActor (DevNotesCore.KeyChord) -> Bool)?
@@ -617,6 +644,15 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
             )
         ]
         textView.inputAccessoryView = accessory
+        // Long-press-to-open-URL: recognised alongside the system's own long-press behaviours
+        // (selection magnifier), and only acts when the press actually lands on a link and the
+        // Settings toggle is on.
+        let longPress = UILongPressGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleLongPress(_:))
+        )
+        longPress.delegate = context.coordinator
+        textView.addGestureRecognizer(longPress)
         let container = EditorContainerView(textView: textView)
         context.coordinator.container = container
         context.coordinator.startObservingKeyboard()
@@ -691,8 +727,18 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
            NSMaxRange(desired) <= length {
             textView.selectedRange = desired
         }
-        if didResetText, textView.contentOffset != preservedOffset {
+        if didResetText, isNoteLoad == false, textView.contentOffset != preservedOffset {
+            // Same-note model edit: keep the view where it was.
             textView.setContentOffset(preservedOffset, animated: false)
+        }
+        if isNoteLoad {
+            // Opening/switching notes: scroll to wherever the caret landed (last line, saved
+            // position, or a search match) once this layout pass settles — without this the caret
+            // moved but the view stayed at the top.
+            DispatchQueue.main.async { [weak textView] in
+                guard let textView else { return }
+                textView.scrollRangeToVisible(textView.selectedRange)
+            }
         }
         if container.showLineNumbers != showLineNumbers {
             container.showLineNumbers = showLineNumbers
@@ -702,10 +748,14 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         if context.coordinator.focusRequestChanged(focusRequest) {
             DispatchQueue.main.async { [weak textView] in textView?.becomeFirstResponder() }
         }
+        // A bumped undo token performs one undo step on the text view's undo manager.
+        if context.coordinator.undoRequestChanged(undoRequest) {
+            textView.undoManager?.undo()
+        }
         container.refreshOverlays()
     }
 
-    final class Coordinator: NSObject, UITextViewDelegate {
+    final class Coordinator: NSObject, UITextViewDelegate, UIGestureRecognizerDelegate {
         var parent: MarkdownTextViewRepresentable
         weak var container: EditorContainerView?
         private let engine = OutlineEngine()
@@ -821,12 +871,45 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
             return lastFocusRequest != value
         }
 
+        /// Last-honoured undo token, so each bump performs exactly one undo step.
+        private var lastUndoRequest = 0
+
+        func undoRequestChanged(_ value: Int) -> Bool {
+            defer { lastUndoRequest = value }
+            return lastUndoRequest != value
+        }
+
         /// True when the load generation changed since the last update (and records the new value).
         /// A change means the text was just replaced wholesale (opening/switching notes) rather
         /// than edited in place.
         func loadGenerationChanged(_ value: Int) -> Bool {
             defer { lastLoadGeneration = value }
             return lastLoadGeneration != value
+        }
+
+        // MARK: - Long press → open URL
+
+        /// Lets the link long-press coexist with the system's own long-press gestures (text
+        /// selection/magnifier) instead of fighting them.
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool { true }
+
+        /// Opens the URL under the press point, if the Settings toggle is on and the press lands
+        /// inside a detected link (bare URLs and the address part of `[text](url)` alike).
+        @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+            guard gesture.state == .began, parent.openLinksOnLongPress,
+                  let textView = container?.textView, let text = textView.text else { return }
+            let point = gesture.location(in: textView)
+            guard let position = textView.closestPosition(to: point) else { return }
+            let offset = textView.offset(from: textView.beginningOfDocument, to: position)
+            guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return }
+            let full = NSRange(location: 0, length: (text as NSString).length)
+            let match = detector.matches(in: text, options: [], range: full)
+                .first { NSLocationInRange(offset, $0.range) }
+            guard let url = match?.url else { return }
+            UIApplication.shared.open(url)
         }
 
         /// Applies a model-driven, same-note text change (outline command, toolbar action,

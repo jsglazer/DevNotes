@@ -17,6 +17,8 @@ public enum StyleTokenKey: String, CaseIterable, Sendable {
     case heading2Size = "heading2-size"
     case heading3Size = "heading3-size"
     case headingColor = "heading-color"
+    case bulletColor = "bullet-color"
+    case sectionSpacing = "section-spacing"
 }
 
 public enum FontWeightToken: Equatable, Sendable {
@@ -92,9 +94,9 @@ public enum StyleSanitizer {
 
     private static func validate(key: StyleTokenKey, value: String) -> StyleValue? {
         switch key {
-        case .fontSize, .lineSpacing, .paragraphSpacing, .heading1Size, .heading2Size, .heading3Size:
+        case .fontSize, .lineSpacing, .paragraphSpacing, .heading1Size, .heading2Size, .heading3Size, .sectionSpacing:
             return parseSize(value).map(StyleValue.size)
-        case .textColor, .backgroundColor, .accentColor, .headingColor:
+        case .textColor, .backgroundColor, .accentColor, .headingColor, .bulletColor:
             return parseColor(value).map(StyleValue.color)
         case .fontFamily:
             return parseFontFamily(value).map(StyleValue.fontFamily)

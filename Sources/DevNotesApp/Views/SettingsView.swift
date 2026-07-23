@@ -1,11 +1,17 @@
 import DevNotesCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Settings: theme toggle, open-jump behaviour, and the bounded "custom CSS" token editor. Input
 /// is sanitised live by `StyleSanitizer`; rejected declarations are shown so the user sees exactly
 /// what was ignored.
 struct SettingsView: View {
     @Bindable var model: AppModel
+
+    /// Backup export state: the zip built when the button was pressed, handed to `fileExporter`
+    /// so the user picks where it lands.
+    @State private var backupDocument: BackupDocument?
+    @State private var isExportingBackup = false
 
     /// A short, copy-pasteable stylesheet shown in the panel and inserted by the button.
     private static let exampleStyle = """
@@ -102,8 +108,32 @@ struct SettingsView: View {
             }
 
             Section("Highlight Similar") {
-                ColorPicker("Highlight colour", selection: hexBinding(\.similarHighlightColorHex), supportsOpacity: false)
-                Text("The background colour used by the toolbar's highlighter button to mark every occurrence of the selected text.")
+                ColorPicker("Light theme colour", selection: hexBinding(\.similarColorLight), supportsOpacity: false)
+                ColorPicker("Dark theme colour", selection: hexBinding(\.similarColorDark), supportsOpacity: false)
+                Text("The background colour used by the toolbar's highlighter button to mark every occurrence of the selected text, per theme.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            #if os(iOS)
+            Section("Links") {
+                Toggle("Open links on long press", isOn: $model.openLinksOnLongPress)
+                Text("Long-press a URL in a note to open it in the browser.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            #endif
+
+            Section("Backup") {
+                Button("Create Backup…") {
+                    if let data = model.createBackupData() {
+                        backupDocument = BackupDocument(data: data)
+                        isExportingBackup = true
+                    }
+                }
+                Text("Saves a zip of all notes, named with the current date and time — you choose where.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -129,9 +159,10 @@ struct SettingsView: View {
                 Picker("Jump to", selection: $model.openJump) {
                     Text("First line").tag(OpenJump.firstLine)
                     Text("Last line").tag(OpenJump.lastLine)
+                    Text("Where I left off").tag(OpenJump.lastPosition)
                 }
                 .pickerStyle(.segmented)
-                Text("Where the caret lands when you open a note.")
+                Text("Where the caret lands when you open a note. \"Where I left off\" returns to the line you were last on in that note.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -148,6 +179,14 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .fileExporter(
+            isPresented: $isExportingBackup,
+            document: backupDocument,
+            contentType: .zip,
+            defaultFilename: model.backupFileName
+        ) { _ in
+            backupDocument = nil
+        }
     }
 
     private var shortcutsTab: some View {
@@ -251,6 +290,23 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// A zip archive handed to `fileExporter` so the user picks where the backup lands. Write-only in
+/// practice; reading is implemented for `FileDocument` conformance.
+private struct BackupDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.zip] }
+    var data: Data
+
+    init(data: Data) { self.data = data }
+
+    init(configuration: ReadConfiguration) throws {
+        data = configuration.file.regularFileContents ?? Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
     }
 }
 

@@ -20,7 +20,13 @@ struct ContentView: View {
     var body: some View {
         content
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { model.refreshPinsFromCloud() }
+                if phase == .active {
+                    model.refreshPinsFromCloud()
+                } else {
+                    // Losing foreground: persist the caret position so "Where I left off" works
+                    // across a relaunch, not only across a note switch.
+                    model.rememberCurrentCaret()
+                }
             }
     }
 
@@ -50,12 +56,11 @@ struct ContentView: View {
                 }
                 // ⌘B is owned by the View-menu command so the shortcut isn't double-bound.
             }
-            ToolbarItem(placement: .primaryAction) {
-                Text(AppVersion.display)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
+            // The version moved to the bottom-left status bar (EditorStatusBar).
         }
+        // Window title = note title, subtitle = the actual file name on disk.
+        .navigationTitle(model.activeTitle.isEmpty ? "DevNotes" : model.activeTitle)
+        .navigationSubtitle(model.selectedID?.rawValue ?? "")
         .task {
             await model.bootstrap()
             // Sync is started only AFTER the first paint / file list — off the launch path.
@@ -74,16 +79,20 @@ struct ContentView: View {
         EditorPane(model: model)
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
-                    HStack {
-                        if model.selectedID != nil {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        if let selectedID = model.selectedID {
                             Text(model.activeTitle.isEmpty ? "Untitled" : model.activeTitle)
                                 .font(.headline.bold())
                                 .lineLimit(1)
+                            // The actual file name on disk, small and secondary next to the title.
+                            // (The version moved to the bottom-left status bar.)
+                            Text(selectedID.rawValue)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                         }
                         Spacer()
-                        Text(AppVersion.display)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
