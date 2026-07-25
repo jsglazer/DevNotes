@@ -47,6 +47,17 @@ private enum PreferenceKey {
     static let similarColorDark = "devnotes.similarColorDark"
     static let openLinksOnLongPress = "devnotes.openLinksOnLongPress"
     static let caretPositions = "devnotes.caretPositions"
+
+    /// Preferences mirrored into iCloud key-value storage so they follow the user across devices:
+    /// the Editor Style token sheet plus the appearance/format settings that describe how notes
+    /// should *look and read* everywhere. Deliberately excludes the device-shaped preferences —
+    /// zoom, wrap, line numbers, spell check, bottom padding, open-on-launch — since a Mac-sized
+    /// zoom level has no business landing on a phone.
+    static let synced: Set<String> = [
+        styleInput, theme, openJump, dateFormat,
+        highlightCurrentLine, currentLineLight, currentLineDark,
+        similarColorLight, similarColorDark
+    ]
 }
 
 /// Zoom bounds and step for the editor/sidebar text scale (⌘+ / ⌘- / ⌘0).
@@ -86,41 +97,41 @@ public final class AppModel {
     public var selectedID: NoteID?
     public var searchQuery = ""
     public var searchOptions = SearchOptions()
-    public var styleInput = "" { didSet { defaults.set(styleInput, forKey: PreferenceKey.styleInput) } }
-    public var theme: AppTheme = .dark { didSet { defaults.set(theme.rawValue, forKey: PreferenceKey.theme) } }
+    public var styleInput = "" { didSet { writePreference(styleInput, forKey: PreferenceKey.styleInput) } }
+    public var theme: AppTheme = .dark { didSet { writePreference(theme.rawValue, forKey: PreferenceKey.theme) } }
 
     /// View/editor preferences surfaced in the View menu and honoured by the editor surface.
-    public var openJump: OpenJump = .firstLine { didSet { defaults.set(openJump.rawValue, forKey: PreferenceKey.openJump) } }
+    public var openJump: OpenJump = .firstLine { didSet { writePreference(openJump.rawValue, forKey: PreferenceKey.openJump) } }
 
     /// Raw file name of the note to open automatically on launch. Empty means "the note at the top
     /// of the list" (the historic behaviour); a stored ID whose file no longer exists also falls
     /// back to the top of the list, so a deleted pick never leaves the app on a blank editor.
-    public var openOnLaunchID: String = "" { didSet { defaults.set(openOnLaunchID, forKey: PreferenceKey.openOnLaunch) } }
-    public var wrapText = true { didSet { defaults.set(wrapText, forKey: PreferenceKey.wrapText) } }
-    public var showLineNumbers = false { didSet { defaults.set(showLineNumbers, forKey: PreferenceKey.showLineNumbers) } }
+    public var openOnLaunchID: String = "" { didSet { writePreference(openOnLaunchID, forKey: PreferenceKey.openOnLaunch) } }
+    public var wrapText = true { didSet { writePreference(wrapText, forKey: PreferenceKey.wrapText) } }
+    public var showLineNumbers = false { didSet { writePreference(showLineNumbers, forKey: PreferenceKey.showLineNumbers) } }
 
     /// Continuous spell checking (red squiggles) in the editor. Defaults ON; toggled from the View
     /// menu and Settings. A basic checker only — no autocorrect/substitutions are enabled.
-    public var spellCheck = true { didSet { defaults.set(spellCheck, forKey: PreferenceKey.spellCheck) } }
+    public var spellCheck = true { didSet { writePreference(spellCheck, forKey: PreferenceKey.spellCheck) } }
 
     /// `DateFormatter` pattern used by the Insert Date & Time action (⌃⌥D). Default produces e.g.
     /// `20260707-143022`. Any Unicode date pattern the user types in Settings is honoured verbatim.
-    public var dateFormat = "yyyyMMdd-HHmmss" { didSet { defaults.set(dateFormat, forKey: PreferenceKey.dateFormat) } }
+    public var dateFormat = "yyyyMMdd-HHmmss" { didSet { writePreference(dateFormat, forKey: PreferenceKey.dateFormat) } }
 
     /// Extra empty space below the last line of the editor (points), so the caret can sit clear of
     /// the window's bottom edge and the last lines are scrollable up into view. Configured in Settings.
-    public var bottomPadding: Double = 120 { didSet { defaults.set(bottomPadding, forKey: PreferenceKey.bottomPadding) } }
+    public var bottomPadding: Double = 120 { didSet { writePreference(bottomPadding, forKey: PreferenceKey.bottomPadding) } }
 
     /// Text-zoom multiplier applied to the editor content area only (the note text). The sidebar
     /// file list and window chrome/toolbars stay at native size. Driven by ⌘+ / ⌘- / ⌘0. Persisted
     /// so the last zoom survives relaunch.
-    public var zoom: Double = Zoom.normal { didSet { defaults.set(zoom, forKey: PreferenceKey.zoom) } }
+    public var zoom: Double = Zoom.normal { didSet { writePreference(zoom, forKey: PreferenceKey.zoom) } }
 
     /// Whether the editor paints a background band behind the caret's line. The band colour is
     /// theme-specific (`currentLineColorLight` / `currentLineColorDark`), each a `#rrggbb(aa)` hex.
-    public var highlightCurrentLine = false { didSet { defaults.set(highlightCurrentLine, forKey: PreferenceKey.highlightCurrentLine) } }
-    public var currentLineColorLight = "#FFF6C2" { didSet { defaults.set(currentLineColorLight, forKey: PreferenceKey.currentLineLight) } }
-    public var currentLineColorDark = "#3A3B22" { didSet { defaults.set(currentLineColorDark, forKey: PreferenceKey.currentLineDark) } }
+    public var highlightCurrentLine = false { didSet { writePreference(highlightCurrentLine, forKey: PreferenceKey.highlightCurrentLine) } }
+    public var currentLineColorLight = "#FFF6C2" { didSet { writePreference(currentLineColorLight, forKey: PreferenceKey.currentLineLight) } }
+    public var currentLineColorDark = "#3A3B22" { didSet { writePreference(currentLineColorDark, forKey: PreferenceKey.currentLineDark) } }
 
     /// Whether the "Highlight Similar" toolbar button is active. While true, every occurrence of
     /// the currently selected text is highlighted across the open note. Session-only (like Find's
@@ -129,12 +140,12 @@ public final class AppModel {
     /// Background colours painted over occurrences the "Highlight Similar" button finds — one per
     /// theme (a colour bright enough for light mode washed the text out in dark mode). Persisted as
     /// `#rrggbb` hex, same as the current-line colours.
-    public var similarColorLight = "#FFE08A" { didSet { defaults.set(similarColorLight, forKey: PreferenceKey.similarColorLight) } }
-    public var similarColorDark = "#6E5A1E" { didSet { defaults.set(similarColorDark, forKey: PreferenceKey.similarColorDark) } }
+    public var similarColorLight = "#FFE08A" { didSet { writePreference(similarColorLight, forKey: PreferenceKey.similarColorLight) } }
+    public var similarColorDark = "#6E5A1E" { didSet { writePreference(similarColorDark, forKey: PreferenceKey.similarColorDark) } }
 
     /// When true (default), a long press on a URL in the note opens it in the browser (iOS — the
     /// text view is editable, so links aren't tappable any other way).
-    public var openLinksOnLongPress = true { didSet { defaults.set(openLinksOnLongPress, forKey: PreferenceKey.openLinksOnLongPress) } }
+    public var openLinksOnLongPress = true { didSet { writePreference(openLinksOnLongPress, forKey: PreferenceKey.openLinksOnLongPress) } }
 
     /// Per-note last caret offset (keyed by raw file name), backing the "Where I left off" On-Open
     /// jump. Recorded when switching notes and when the app resigns active.
@@ -157,10 +168,16 @@ public final class AppModel {
     /// device appear on the others.
     public private(set) var pinnedIDs: [String] = []
 
-    /// iCloud key-value store backing the pinned list, so pins sync Mac ⇄ iPhone/iPad. Small,
-    /// eventually-consistent; the on-disk `UserDefaults` copy is the local fallback when iCloud is
-    /// unavailable.
+    /// iCloud key-value store backing the pinned list and the synced preferences (`PreferenceKey
+    /// .synced`), so pins and the Editor Style / appearance settings follow the user Mac ⇄
+    /// iPhone/iPad. Small, eventually-consistent; the on-disk `UserDefaults` copy is the local
+    /// fallback when iCloud is unavailable.
     @ObservationIgnored private let kvStore = NSUbiquitousKeyValueStore.default
+
+    /// True while preferences are being loaded from disk or adopted from iCloud, so the property
+    /// observers don't echo a value straight back into the store it just came from (and a launch
+    /// can't push this device's stale local copy over a newer one from another device).
+    @ObservationIgnored private var isAdoptingPreferences = false
 
     public private(set) var conflicts: [ConflictRecord] = []
     public let editor = EditorViewModel()
@@ -184,22 +201,24 @@ public final class AppModel {
         self.defaults = defaults
         self.watchDirectory = watchDirectory
         self.watchUbiquity = watchUbiquity
+        // Prime the iCloud store before reading preferences, so a value another device wrote is
+        // already available to `loadPreferences` rather than only landing on a later notification.
+        kvStore.synchronize()
         loadPreferences()
         (keymap, keymapWarnings) = KeymapStore.load()
         editor.setOnChange { [weak self] _ in
             self?.hasUnsavedEdits = true
             self?.scheduleSave()
         }
-        // Pull pins that arrive from another device. The notification fires off the main thread, so
-        // hop back before touching @MainActor state.
+        // Pull pins and synced preferences that arrive from another device. The notification fires
+        // off the main thread, so hop back before touching @MainActor state.
         NotificationCenter.default.addObserver(
             forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
             object: kvStore,
             queue: nil
         ) { [weak self] _ in
-            Task { @MainActor in self?.applyExternalPinChange() }
+            Task { @MainActor in self?.applyExternalCloudChange() }
         }
-        kvStore.synchronize()
     }
 
     /// The open note's display title (first non-empty line, heading markers stripped), derived
@@ -210,7 +229,20 @@ public final class AppModel {
         return Note(id: NoteID(""), body: editor.text, createdAt: now, modifiedAt: now).title
     }
 
+    /// Persists a preference locally and, for the cross-device keys, mirrors it into iCloud
+    /// key-value storage so the setting follows the user to their other devices. Suppressed while
+    /// `isAdoptingPreferences` — a value that just arrived from iCloud (or from disk at launch) is
+    /// only written to the local copy, never bounced back up.
+    private func writePreference(_ value: Any, forKey key: String) {
+        defaults.set(value, forKey: key)
+        guard isAdoptingPreferences == false, PreferenceKey.synced.contains(key) else { return }
+        kvStore.set(value, forKey: key)
+        kvStore.synchronize()
+    }
+
     private func loadPreferences() {
+        // Loading is not a user edit: mirror nothing while the stored values are read back in.
+        isAdoptingPreferences = true
         if let raw = defaults.string(forKey: PreferenceKey.theme), let value = AppTheme(rawValue: raw) {
             theme = value
         }
@@ -263,16 +295,73 @@ public final class AppModel {
         } else {
             pinnedIDs = Self.deduped(defaults.stringArray(forKey: PreferenceKey.pinned) ?? [])
         }
+        isAdoptingPreferences = false
+        // Same rule for the synced preferences: whatever iCloud holds wins over the local copy.
+        adoptCloudPreferences()
     }
 
-    /// Force-pulls the latest cross-device pin list from iCloud and adopts it. Called when the app
-    /// returns to the foreground: the live `didChangeExternallyNotification` is only delivered while
-    /// the app is running, so a pin set on another device while this one was backgrounded or closed
-    /// would otherwise not surface until a later relaunch. `synchronize()` re-primes the store and
-    /// any freshly-pulled value is adopted here (and via the notification when it lands).
-    public func refreshPinsFromCloud() {
+    /// Adopts the synced preferences (Editor Style tokens, theme, current-line and Highlight
+    /// Similar colours, date format, On-Open jump) currently held in iCloud, so a change made on one
+    /// device lands here. Keys iCloud has never seen are left alone, and unchanged values are
+    /// skipped so this never churns the editor.
+    private func adoptCloudPreferences() {
+        isAdoptingPreferences = true
+        defer { isAdoptingPreferences = false }
+
+        var styleDidChange = false
+        if let raw = kvStore.string(forKey: PreferenceKey.styleInput), raw != styleInput {
+            styleInput = raw
+            styleDidChange = true
+        }
+        if let raw = kvStore.string(forKey: PreferenceKey.theme),
+           let value = AppTheme(rawValue: raw), value != theme {
+            theme = value
+        }
+        if let raw = kvStore.string(forKey: PreferenceKey.openJump),
+           let value = OpenJump(rawValue: raw), value != openJump {
+            openJump = value
+        }
+        if let raw = kvStore.string(forKey: PreferenceKey.dateFormat),
+           raw.isEmpty == false, raw != dateFormat {
+            dateFormat = raw
+        }
+        if kvStore.object(forKey: PreferenceKey.highlightCurrentLine) != nil {
+            let value = kvStore.bool(forKey: PreferenceKey.highlightCurrentLine)
+            if value != highlightCurrentLine { highlightCurrentLine = value }
+        }
+        adoptCloudColor(forKey: PreferenceKey.currentLineLight, into: \.currentLineColorLight)
+        adoptCloudColor(forKey: PreferenceKey.currentLineDark, into: \.currentLineColorDark)
+        adoptCloudColor(forKey: PreferenceKey.similarColorLight, into: \.similarColorLight)
+        adoptCloudColor(forKey: PreferenceKey.similarColorDark, into: \.similarColorDark)
+
+        // The style sheet is handed to the editor at bootstrap and on Settings edits; a sheet that
+        // arrived from another device has to be pushed through too, or it wouldn't apply until the
+        // next launch.
+        if styleDidChange { editor.style = styleSheet }
+    }
+
+    /// Copies one `#rrggbb` colour preference down from iCloud when it's present and different.
+    private func adoptCloudColor(forKey key: String, into keyPath: ReferenceWritableKeyPath<AppModel, String>) {
+        guard let raw = kvStore.string(forKey: key), raw.isEmpty == false, raw != self[keyPath: keyPath] else { return }
+        self[keyPath: keyPath] = raw
+    }
+
+    /// Force-pulls the latest cross-device pins and preferences from iCloud and adopts them. Called
+    /// when the app returns to the foreground: the live `didChangeExternallyNotification` is only
+    /// delivered while the app is running, so a change made on another device while this one was
+    /// backgrounded or closed would otherwise not surface until a later relaunch. `synchronize()`
+    /// re-primes the store and any freshly-pulled value is adopted here (and via the notification
+    /// when it lands).
+    public func refreshFromCloud() {
         kvStore.synchronize()
+        applyExternalCloudChange()
+    }
+
+    /// Adopts everything that can arrive from another device: the pinned list and the synced
+    /// preferences.
+    private func applyExternalCloudChange() {
         applyExternalPinChange()
+        adoptCloudPreferences()
     }
 
     /// Adopts a pinned list that landed from another device via iCloud, keeping the local defaults
@@ -778,22 +867,42 @@ public final class AppModel {
         return "DevNotes-Backup-\(formatter.string(from: Date()))"
     }
 
-    /// Zips the whole notes directory and returns the archive's bytes, or nil when there is no
-    /// on-disk directory (in-memory repository) or the coordination fails. Uses the
-    /// `NSFileCoordinator` `.forUploading` read, which materialises a directory as a zip without
-    /// any third-party archiver.
-    public func createBackupData() -> Data? {
-        guard let directory = watchDirectory else { return nil }
+    /// Zips the whole notes directory and returns the archive's bytes. Uses the `NSFileCoordinator`
+    /// `.forUploading` read, which materialises a directory as a zip without any third-party
+    /// archiver. Throws rather than returning nil: a backup that can't be built has to say why, or
+    /// pressing the button looks like it did nothing.
+    public func createBackupData() throws -> Data {
+        guard let directory = watchDirectory else { throw BackupError.noNotesDirectory }
         var data: Data?
+        var readError: Error?
         var coordinationError: NSError?
         NSFileCoordinator().coordinate(
             readingItemAt: directory,
             options: .forUploading,
             error: &coordinationError
         ) { zippedURL in
-            data = try? Data(contentsOf: zippedURL)
+            do { data = try Data(contentsOf: zippedURL) } catch { readError = error }
         }
+        if let coordinationError { throw BackupError.coordination(coordinationError.localizedDescription) }
+        if let readError { throw BackupError.coordination(readError.localizedDescription) }
+        guard let data else { throw BackupError.coordination("The archive could not be read.") }
         return data
+    }
+
+    /// Why a backup couldn't be built, surfaced verbatim in the Settings alert.
+    public enum BackupError: LocalizedError {
+        /// No on-disk notes directory (an in-memory repository in tests/previews).
+        case noNotesDirectory
+        case coordination(String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .noNotesDirectory:
+                return "There's no notes folder on this device to back up."
+            case .coordination(let detail):
+                return "The notes folder couldn't be archived: \(detail)"
+            }
+        }
     }
 
     // MARK: - Conflicts

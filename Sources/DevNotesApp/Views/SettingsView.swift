@@ -1,6 +1,9 @@
 import DevNotesCore
 import SwiftUI
 import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#endif
 
 /// Settings: theme toggle, open-jump behaviour, and the bounded "custom CSS" token editor. Input
 /// is sanitised live by `StyleSanitizer`; rejected declarations are shown so the user sees exactly
@@ -8,10 +11,23 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @Bindable var model: AppModel
 
-    /// Backup export state: the zip built when the button was pressed, handed to `fileExporter`
-    /// so the user picks where it lands.
+    /// Backup export state: on iOS the zip built when the button was pressed, handed to
+    /// `fileExporter` so the user picks where it lands. macOS runs an `NSSavePanel` instead (see
+    /// `createBackup`). `backupError` carries the reason a backup failed, so the button can never
+    /// silently do nothing.
     @State private var backupDocument: BackupDocument?
     @State private var isExportingBackup = false
+    @State private var backupError: String?
+
+    /// How the long-press-to-open-a-link gesture is described on this platform (a click-and-hold on
+    /// the Mac, a long press on iOS — the same recogniser either way).
+    private static var longPressHelp: String {
+        #if os(macOS)
+        return "Click and hold on a URL in a note to open it in your browser."
+        #else
+        return "Long-press a URL in a note to open it in the browser."
+        #endif
+    }
 
     /// A short, copy-pasteable stylesheet shown in the panel and inserted by the button.
     private static let exampleStyle = """
@@ -116,23 +132,18 @@ struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            #if os(iOS)
+            // Both platforms: the editor is editable, so links are never plain-tappable/clickable —
+            // a press-and-hold is the affordance on each.
             Section("Links") {
                 Toggle("Open links on long press", isOn: $model.openLinksOnLongPress)
-                Text("Long-press a URL in a note to open it in the browser.")
+                Text(Self.longPressHelp)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            #endif
 
             Section("Backup") {
-                Button("Create Backup…") {
-                    if let data = model.createBackupData() {
-                        backupDocument = BackupDocument(data: data)
-                        isExportingBackup = true
-                    }
-                }
+                Button("Create Backup…") { createBackup() }
                 Text("Saves a zip of all notes, named with the current date and time — you choose where.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -179,6 +190,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        #if os(iOS)
         .fileExporter(
             isPresented: $isExportingBackup,
             document: backupDocument,
@@ -187,7 +199,50 @@ struct SettingsView: View {
         ) { _ in
             backupDocument = nil
         }
+        #endif
+        .alert(
+            "Backup Failed",
+            isPresented: Binding(get: { backupError != nil }, set: { if $0 == false { backupError = nil } })
+        ) {
+            Button("OK") { backupError = nil }
+        } message: {
+            Text(backupError ?? "")
+        }
     }
+
+    /// Builds the backup zip and asks the user where to put it. Any failure lands in `backupError`
+    /// and is shown as an alert — the previous version silently swallowed a nil archive, so a failed
+    /// backup was indistinguishable from a dead button.
+    private func createBackup() {
+        do {
+            let data = try model.createBackupData()
+            #if os(macOS)
+            try saveBackupWithPanel(data)
+            #else
+            backupDocument = BackupDocument(data: data)
+            isExportingBackup = true
+            #endif
+        } catch {
+            backupError = error.localizedDescription
+        }
+    }
+
+    #if os(macOS)
+    /// Saves the archive through an `NSSavePanel` run directly from the Settings window, rather than
+    /// the `fileExporter` this used to hand the document to — the "nothing happens when clicking
+    /// Create Backup…" report. The app is sandboxed, so writing where the user pointed also needs
+    /// the `com.apple.security.files.user-selected.read-write` entitlement, added alongside this;
+    /// without it the write is refused. Any failure surfaces in the alert instead of being swallowed.
+    private func saveBackupWithPanel(_ data: Data) throws {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.zip]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "\(model.backupFileName).zip"
+        panel.message = "Choose where to save the DevNotes backup."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        try data.write(to: url)
+    }
+    #endif
 
     private var shortcutsTab: some View {
         Form {

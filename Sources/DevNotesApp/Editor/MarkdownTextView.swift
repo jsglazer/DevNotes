@@ -38,8 +38,8 @@ struct MarkdownTextView: View {
     /// as opposed to an in-place edit — tells the editor surface when to reset the undo stack
     /// instead of registering the change as an undoable edit.
     var loadGeneration = 0
-    /// When true, a long press on a URL opens it in the browser (iOS only — the editable text view
-    /// has no tappable links otherwise).
+    /// When true, a long press (click-and-hold on the Mac) on a URL opens it in the browser — the
+    /// editable text view has no clickable/tappable links otherwise.
     var openLinksOnLongPress = false
     /// Resolves a pressed key chord to a keymap action; returns true when handled so the editor
     /// consumes the event. Provided by the shell (macOS only); iOS ignores it.
@@ -122,6 +122,18 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         // current-line band `draw(_:)` lays down first, which was why the highlight never appeared.
         // The scroll view supplies the editor background instead, so the band shows behind the text.
         textView.drawsBackground = false
+        // Click-and-hold-to-open-URL, the Mac counterpart of the iOS long press (the text view is
+        // editable, so links are never clickable any other way). `delaysPrimaryMouseButtonEvents =
+        // false` is essential: the text view must keep receiving mouse-downs immediately, so a plain
+        // click still places the caret and a drag still selects while the recogniser waits out the
+        // hold.
+        let press = NSPressGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleLongPress(_:))
+        )
+        press.minimumPressDuration = 0.5
+        press.delaysPrimaryMouseButtonEvents = false
+        textView.addGestureRecognizer(press)
         context.coordinator.textView = textView
 
         let scrollView = NSScrollView()
@@ -408,6 +420,17 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         func loadGenerationChanged(_ value: Int) -> Bool {
             defer { lastLoadGeneration = value }
             return lastLoadGeneration != value
+        }
+
+        // MARK: - Click-and-hold → open URL
+
+        /// Opens the URL under the press point, if the Settings toggle is on and the press landed
+        /// inside a detected link (bare URLs and the address part of `[text](url)` alike).
+        @MainActor @objc func handleLongPress(_ gesture: NSPressGestureRecognizer) {
+            guard gesture.state == .began, parent.openLinksOnLongPress, let textView else { return }
+            let offset = textView.characterIndexForInsertion(at: gesture.location(in: textView))
+            guard let url = DevNotesCore.LinkDetector.url(in: textView.string, at: offset) else { return }
+            NSWorkspace.shared.open(url)
         }
 
         /// Applies a model-driven, same-note text change (outline command, toolbar action,
@@ -904,11 +927,7 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
             let point = gesture.location(in: textView)
             guard let position = textView.closestPosition(to: point) else { return }
             let offset = textView.offset(from: textView.beginningOfDocument, to: position)
-            guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return }
-            let full = NSRange(location: 0, length: (text as NSString).length)
-            let match = detector.matches(in: text, options: [], range: full)
-                .first { NSLocationInRange(offset, $0.range) }
-            guard let url = match?.url else { return }
+            guard let url = DevNotesCore.LinkDetector.url(in: text, at: offset) else { return }
             UIApplication.shared.open(url)
         }
 

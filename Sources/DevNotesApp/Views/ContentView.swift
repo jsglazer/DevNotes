@@ -8,9 +8,9 @@ import SwiftUI
 ///   collapse behaviour doesn't give a usable phone layout for this app.
 struct ContentView: View {
     @Bindable var model: AppModel
-    /// Re-pull cross-device pins whenever the app becomes active — the live iCloud change
-    /// notification only arrives while running, so a pin set on another device while this one was
-    /// backgrounded/closed is picked up here.
+    /// Re-pull cross-device pins and synced settings whenever the app becomes active — the live
+    /// iCloud change notification only arrives while running, so a pin or an Editor Style change
+    /// made on another device while this one was backgrounded/closed is picked up here.
     @Environment(\.scenePhase) private var scenePhase
     #if os(iOS)
     @State private var isNotesListPresented = false
@@ -21,7 +21,7 @@ struct ContentView: View {
         content
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
-                    model.refreshPinsFromCloud()
+                    model.refreshFromCloud()
                 } else {
                     // Losing foreground: persist the caret position so "Where I left off" works
                     // across a relaunch, not only across a note switch.
@@ -58,9 +58,11 @@ struct ContentView: View {
             }
             // The version moved to the bottom-left status bar (EditorStatusBar).
         }
-        // Window title = note title, subtitle = the actual file name on disk.
+        // Window title = note title. Subtitle = the file name on disk, but only when that name says
+        // something: notes DevNotes creates are `<UUID>.md`, and a 36-character UUID beside the title
+        // read as a long string of noise (see `NoteID.displayFileName`).
         .navigationTitle(model.activeTitle.isEmpty ? "DevNotes" : model.activeTitle)
-        .navigationSubtitle(model.selectedID?.rawValue ?? "")
+        .navigationSubtitle(model.selectedID?.displayFileName ?? "")
         .task {
             await model.bootstrap()
             // Sync is started only AFTER the first paint / file list — off the launch path.
@@ -84,13 +86,17 @@ struct ContentView: View {
                             Text(model.activeTitle.isEmpty ? "Untitled" : model.activeTitle)
                                 .font(.headline.bold())
                                 .lineLimit(1)
-                            // The actual file name on disk, small and secondary next to the title.
-                            // (The version moved to the bottom-left status bar.)
-                            Text(selectedID.rawValue)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+                            // The file name on disk, small and secondary next to the title — shown
+                            // only when it carries information. Notes DevNotes creates are named
+                            // `<UUID>.md`, and printing that UUID here was the "long series of
+                            // characters" at the top of the screen (see `NoteID.displayFileName`).
+                            if let fileName = selectedID.displayFileName {
+                                Text(fileName)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
                         }
                         Spacer()
                     }

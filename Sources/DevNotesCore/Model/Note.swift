@@ -6,6 +6,16 @@ public struct NoteID: Hashable, Sendable, Codable, CustomStringConvertible {
     public let rawValue: String
     public init(_ rawValue: String) { self.rawValue = rawValue }
     public var description: String { rawValue }
+
+    /// The file name worth showing next to a note's title, or nil when it carries no information.
+    /// Notes DevNotes creates are named `<UUID>.md`, and a 36-character UUID at the top of the
+    /// screen reads as a long series of characters rather than a name — so those are hidden and the
+    /// title stands alone. Human-named files (`Inbox.md`, dropped in via iCloud Drive) are kept,
+    /// since there the name is the useful bit.
+    public var displayFileName: String? {
+        let base = (rawValue as NSString).deletingPathExtension
+        return UUID(uuidString: base) == nil ? rawValue : nil
+    }
 }
 
 /// A single note. `body` is the full Markdown text; the file on disk is authoritative and
