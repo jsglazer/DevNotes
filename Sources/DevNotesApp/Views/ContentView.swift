@@ -24,9 +24,28 @@ struct ContentView: View {
                     model.refreshFromCloud()
                 } else {
                     // Losing foreground: persist the caret position so "Where I left off" works
-                    // across a relaunch, not only across a note switch.
+                    // across a relaunch, not only across a note switch, and push any settings change
+                    // still sitting out its upload debounce.
                     model.rememberCurrentCaret()
+                    model.flushPendingCloudWrites()
                 }
+            }
+            // Both this device and another changed the synced settings since they were last in
+            // agreement — there's no correct automatic answer, so the user picks the winner and it's
+            // republished for everyone (see `AppModel.reconcileCloudPreferences`).
+            .alert(
+                "Settings Differ Between Devices",
+                isPresented: Binding(
+                    get: { model.preferenceConflict != nil },
+                    set: { if $0 == false { model.preferenceConflict = nil } }
+                ),
+                presenting: model.preferenceConflict
+            ) { _ in
+                Button("Use iCloud Settings") { model.resolvePreferenceConflict(keepingCloud: true) }
+                Button("Keep This Device's") { model.resolvePreferenceConflict(keepingCloud: false) }
+                Button("Later", role: .cancel) { model.preferenceConflict = nil }
+            } message: { conflict in
+                Text(conflict.message)
             }
     }
 

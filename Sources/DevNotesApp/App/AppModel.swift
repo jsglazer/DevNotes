@@ -26,8 +26,9 @@ public enum OpenJump: String, CaseIterable, Sendable {
 }
 
 /// UserDefaults keys for the small set of persisted UI preferences. Notes themselves are never
-/// stored here — only view/editor preferences.
-private enum PreferenceKey {
+/// stored here — only view/editor preferences. Module-internal (not private) so the preference-sync
+/// layer in `PreferenceSync.swift` reads and writes the very same keys.
+enum PreferenceKey {
     static let theme = "devnotes.theme"
     static let styleInput = "devnotes.styleInput"
     static let openJump = "devnotes.openJump"
@@ -47,6 +48,15 @@ private enum PreferenceKey {
     static let similarColorDark = "devnotes.similarColorDark"
     static let openLinksOnLongPress = "devnotes.openLinksOnLongPress"
     static let caretPositions = "devnotes.caretPositions"
+
+    /// When the synced preferences were last changed, and by which device. Stored in BOTH stores:
+    /// the local copy says when *this* device last changed them, the iCloud copy when the winning
+    /// device did. Comparing the two against `adoptedRevision` is what tells "only they changed"
+    /// from "only we changed" from "both changed" (a real conflict).
+    static let prefsRevision = "devnotes.prefsRevision"
+    static let prefsDevice = "devnotes.prefsDevice"
+    /// Local only: the iCloud revision this device last reconciled with.
+    static let adoptedRevision = "devnotes.adoptedRevision"
 
     /// Preferences mirrored into iCloud key-value storage so they follow the user across devices:
     /// the Editor Style token sheet plus the appearance/format settings that describe how notes
@@ -179,6 +189,22 @@ public final class AppModel {
     /// can't push this device's stale local copy over a newer one from another device).
     @ObservationIgnored private var isAdoptingPreferences = false
 
+    /// When this device last changed a synced preference, and the iCloud revision it last
+    /// reconciled with (both seconds since 1970, 0 when never). See `reconcileCloudPreferences`.
+    @ObservationIgnored private var localRevision: Double = 0
+    @ObservationIgnored private var adoptedRevision: Double = 0
+
+    /// Coalesces the iCloud mirror. Every synced preference edit used to `set` + `synchronize()`
+    /// immediately, which for the Editor Style box meant one key-value-store push PER KEYSTROKE —
+    /// and that store throttles hard, so the pushes were delayed or coalesced away rather than
+    /// delivered. Local storage is still written instantly; only the upload waits for the pause.
+    @ObservationIgnored private var mirrorTask: Task<Void, Never>?
+    @ObservationIgnored private static let mirrorDelay: UInt64 = 1_500_000_000
+
+    /// Set when this device and iCloud have both changed the synced preferences since they were
+    /// last reconciled. The root view presents it as an alert; `resolvePreferenceConflict` clears it.
+    var preferenceConflict: PreferenceConflict?
+
     public private(set) var conflicts: [ConflictRecord] = []
     public let editor = EditorViewModel()
 
@@ -229,15 +255,97 @@ public final class AppModel {
         return Note(id: NoteID(""), body: editor.text, createdAt: now, modifiedAt: now).title
     }
 
-    /// Persists a preference locally and, for the cross-device keys, mirrors it into iCloud
-    /// key-value storage so the setting follows the user to their other devices. Suppressed while
-    /// `isAdoptingPreferences` — a value that just arrived from iCloud (or from disk at launch) is
-    /// only written to the local copy, never bounced back up.
+    /// Persists a preference locally and, for the cross-device keys, schedules the iCloud mirror so
+    /// the setting follows the user to their other devices. Suppressed while `isAdoptingPreferences`
+    /// — a value that just arrived from iCloud (or from disk at launch) is only written to the local
+    /// copy, never bounced back up.
     private func writePreference(_ value: Any, forKey key: String) {
         defaults.set(value, forKey: key)
         guard isAdoptingPreferences == false, PreferenceKey.synced.contains(key) else { return }
-        kvStore.set(value, forKey: key)
-        kvStore.synchronize()
+        localRevision = Date().timeIntervalSince1970
+        defaults.set(localRevision, forKey: PreferenceKey.prefsRevision)
+        scheduleCloudMirror()
+    }
+
+    /// Uploads this device's synced preferences once the user stops changing them. Cancelled and
+    /// re-armed on each edit, so a burst of typing in the Editor Style box results in one push.
+    private func scheduleCloudMirror() {
+        mirrorTask?.cancel()
+        mirrorTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.mirrorDelay)
+            guard Task.isCancelled == false else { return }
+            self?.publishPreferences()
+        }
+    }
+
+    /// Pushes any mirror still waiting out its debounce. Called when the app leaves the foreground,
+    /// so a setting changed a moment before switching away isn't stranded on this device.
+    public func flushPendingCloudWrites() {
+        guard mirrorTask != nil else { return }
+        publishPreferences()
+    }
+
+    /// Publishes this device's snapshot as the winning copy and records that we're now in step with
+    /// it, so the next reconcile doesn't read our own push back as a remote change.
+    private func publishPreferences() {
+        mirrorTask?.cancel()
+        mirrorTask = nil
+        if localRevision == 0 { localRevision = Date().timeIntervalSince1970 }
+        kvStore.publish(localPreferences, revision: localRevision, device: Platform.deviceName)
+        adoptedRevision = localRevision
+        persistRevisions()
+    }
+
+    private func persistRevisions() {
+        defaults.set(localRevision, forKey: PreferenceKey.prefsRevision)
+        defaults.set(adoptedRevision, forKey: PreferenceKey.adoptedRevision)
+    }
+
+    /// This device's current synced-preference values.
+    private var localPreferences: SyncedPreferences {
+        SyncedPreferences(
+            styleInput: styleInput,
+            theme: theme.rawValue,
+            openJump: openJump.rawValue,
+            dateFormat: dateFormat,
+            highlightCurrentLine: highlightCurrentLine,
+            currentLineLight: currentLineColorLight,
+            currentLineDark: currentLineColorDark,
+            similarLight: similarColorLight,
+            similarDark: similarColorDark
+        )
+    }
+
+    /// Applies a snapshot to this device without mirroring it back up. Unchanged values are skipped
+    /// so this never churns the editor, and a style sheet that arrived from elsewhere is pushed into
+    /// `editor.style` immediately — otherwise it wouldn't take effect until the next launch.
+    private func apply(_ preferences: SyncedPreferences) {
+        isAdoptingPreferences = true
+        defer { isAdoptingPreferences = false }
+
+        let styleDidChange = preferences.styleInput != styleInput
+        if styleDidChange { styleInput = preferences.styleInput }
+        if let value = AppTheme(rawValue: preferences.theme), value != theme { theme = value }
+        if let value = OpenJump(rawValue: preferences.openJump), value != openJump { openJump = value }
+        if preferences.dateFormat.isEmpty == false, preferences.dateFormat != dateFormat {
+            dateFormat = preferences.dateFormat
+        }
+        if preferences.highlightCurrentLine != highlightCurrentLine {
+            highlightCurrentLine = preferences.highlightCurrentLine
+        }
+        if preferences.currentLineLight.isEmpty == false, preferences.currentLineLight != currentLineColorLight {
+            currentLineColorLight = preferences.currentLineLight
+        }
+        if preferences.currentLineDark.isEmpty == false, preferences.currentLineDark != currentLineColorDark {
+            currentLineColorDark = preferences.currentLineDark
+        }
+        if preferences.similarLight.isEmpty == false, preferences.similarLight != similarColorLight {
+            similarColorLight = preferences.similarLight
+        }
+        if preferences.similarDark.isEmpty == false, preferences.similarDark != similarColorDark {
+            similarColorDark = preferences.similarDark
+        }
+        if styleDidChange { editor.style = styleSheet }
     }
 
     private func loadPreferences() {
@@ -288,6 +396,8 @@ public final class AppModel {
             openLinksOnLongPress = defaults.bool(forKey: PreferenceKey.openLinksOnLongPress)
         }
         caretPositions = (defaults.dictionary(forKey: PreferenceKey.caretPositions) as? [String: Int]) ?? [:]
+        localRevision = defaults.double(forKey: PreferenceKey.prefsRevision)
+        adoptedRevision = defaults.double(forKey: PreferenceKey.adoptedRevision)
         // iCloud copy wins when present (it's the cross-device source of truth); otherwise fall back
         // to the local list so a first launch offline still shows the device's own pins.
         if let cloud = kvStore.array(forKey: PreferenceKey.pinned) as? [String] {
@@ -296,54 +406,92 @@ public final class AppModel {
             pinnedIDs = Self.deduped(defaults.stringArray(forKey: PreferenceKey.pinned) ?? [])
         }
         isAdoptingPreferences = false
-        // Same rule for the synced preferences: whatever iCloud holds wins over the local copy.
-        adoptCloudPreferences()
+        // The synced preferences need an actual decision, not a blind copy — see
+        // `reconcileCloudPreferences`.
+        reconcileCloudPreferences()
     }
 
-    /// Adopts the synced preferences (Editor Style tokens, theme, current-line and Highlight
-    /// Similar colours, date format, On-Open jump) currently held in iCloud, so a change made on one
-    /// device lands here. Keys iCloud has never seen are left alone, and unchanged values are
-    /// skipped so this never churns the editor.
-    private func adoptCloudPreferences() {
-        isAdoptingPreferences = true
-        defer { isAdoptingPreferences = false }
+    /// Reconciles this device's synced preferences (Editor Style tokens, theme, current-line and
+    /// Highlight Similar colours, date format, On-Open jump) with the copy in iCloud.
+    ///
+    /// The old rule was "iCloud always wins", which is wrong in both directions: it reverted a
+    /// setting changed on this device while iCloud held an older copy, and it gave no way to tell a
+    /// change that genuinely arrived from another device from one that never made it up. Revision
+    /// stamps replace it:
+    ///
+    /// - only iCloud moved since we last reconciled → adopt it;
+    /// - only this device moved → publish ours;
+    /// - **both** moved → a real divergence with no correct automatic answer, so ask the user
+    ///   (`preferenceConflict`) rather than picking a side and losing the other.
+    ///
+    /// Values that match need no decision at all, and a device upgrading from a build that never
+    /// stamped revisions falls into the "ask" branch — which is exactly the Mac-has-four-tokens /
+    /// phone-has-one situation this was written for.
+    private func reconcileCloudPreferences() {
+        // Don't stack prompts: a pending conflict is already the user's to answer.
+        guard preferenceConflict == nil else { return }
+        let local = localPreferences
+        guard let remote = kvStore.syncedPreferences(mergedOnto: local) else {
+            // iCloud has never seen these settings — give the other devices something to adopt.
+            publishPreferences()
+            return
+        }
+        let cloudRevision = kvStore.preferencesRevision
+        guard remote != local else {
+            // Already in agreement; just record that we've seen this revision.
+            adoptedRevision = max(adoptedRevision, cloudRevision)
+            persistRevisions()
+            return
+        }
 
-        var styleDidChange = false
-        if let raw = kvStore.string(forKey: PreferenceKey.styleInput), raw != styleInput {
-            styleInput = raw
-            styleDidChange = true
+        let remoteChanged = cloudRevision > adoptedRevision
+        let localChanged = localRevision > adoptedRevision
+        switch (remoteChanged, localChanged) {
+        case (true, true):
+            raisePreferenceConflict(remote: remote, local: local)
+        case (true, false):
+            adopt(remote, revision: cloudRevision)
+        case (false, true):
+            publishPreferences()
+        case (false, false):
+            // Neither side has moved since the last reconcile, yet they differ — the first run after
+            // upgrading from a build that didn't stamp revisions. Fall back to whichever carries the
+            // later stamp, and ask when even that can't separate them.
+            if cloudRevision > localRevision {
+                adopt(remote, revision: cloudRevision)
+            } else if localRevision > cloudRevision {
+                publishPreferences()
+            } else {
+                raisePreferenceConflict(remote: remote, local: local)
+            }
         }
-        if let raw = kvStore.string(forKey: PreferenceKey.theme),
-           let value = AppTheme(rawValue: raw), value != theme {
-            theme = value
-        }
-        if let raw = kvStore.string(forKey: PreferenceKey.openJump),
-           let value = OpenJump(rawValue: raw), value != openJump {
-            openJump = value
-        }
-        if let raw = kvStore.string(forKey: PreferenceKey.dateFormat),
-           raw.isEmpty == false, raw != dateFormat {
-            dateFormat = raw
-        }
-        if kvStore.object(forKey: PreferenceKey.highlightCurrentLine) != nil {
-            let value = kvStore.bool(forKey: PreferenceKey.highlightCurrentLine)
-            if value != highlightCurrentLine { highlightCurrentLine = value }
-        }
-        adoptCloudColor(forKey: PreferenceKey.currentLineLight, into: \.currentLineColorLight)
-        adoptCloudColor(forKey: PreferenceKey.currentLineDark, into: \.currentLineColorDark)
-        adoptCloudColor(forKey: PreferenceKey.similarColorLight, into: \.similarColorLight)
-        adoptCloudColor(forKey: PreferenceKey.similarColorDark, into: \.similarColorDark)
-
-        // The style sheet is handed to the editor at bootstrap and on Settings edits; a sheet that
-        // arrived from another device has to be pushed through too, or it wouldn't apply until the
-        // next launch.
-        if styleDidChange { editor.style = styleSheet }
     }
 
-    /// Copies one `#rrggbb` colour preference down from iCloud when it's present and different.
-    private func adoptCloudColor(forKey key: String, into keyPath: ReferenceWritableKeyPath<AppModel, String>) {
-        guard let raw = kvStore.string(forKey: key), raw.isEmpty == false, raw != self[keyPath: keyPath] else { return }
-        self[keyPath: keyPath] = raw
+    private func raisePreferenceConflict(remote: SyncedPreferences, local: SyncedPreferences) {
+        preferenceConflict = PreferenceConflict(
+            remote: remote,
+            remoteDevice: kvStore.preferencesDevice,
+            differences: remote.differences(from: local)
+        )
+    }
+
+    /// Takes iCloud's copy and records that we're in step with it.
+    private func adopt(_ preferences: SyncedPreferences, revision: Double) {
+        apply(preferences)
+        localRevision = max(localRevision, revision)
+        adoptedRevision = max(adoptedRevision, revision)
+        persistRevisions()
+    }
+
+    /// Answers the settings-conflict alert. Either way the winning copy is republished with a fresh
+    /// revision, so the *other* device sees an unambiguously newer copy and adopts it without being
+    /// asked in turn — one prompt settles the divergence everywhere.
+    func resolvePreferenceConflict(keepingCloud: Bool) {
+        guard let conflict = preferenceConflict else { return }
+        preferenceConflict = nil
+        if keepingCloud { apply(conflict.remote) }
+        localRevision = Date().timeIntervalSince1970
+        publishPreferences()
     }
 
     /// Force-pulls the latest cross-device pins and preferences from iCloud and adopts them. Called
@@ -361,7 +509,7 @@ public final class AppModel {
     /// preferences.
     private func applyExternalCloudChange() {
         applyExternalPinChange()
-        adoptCloudPreferences()
+        reconcileCloudPreferences()
     }
 
     /// Adopts a pinned list that landed from another device via iCloud, keeping the local defaults
@@ -777,6 +925,14 @@ public final class AppModel {
         }
         let now = Date()
         let existing = try? await repository.load(id)
+        // Never rewrite a file whose contents already match. Writing it would bump its modification
+        // date, which re-sorts the sidebar — so a note that was only *opened* would jump to the top
+        // of the list as though it had been edited (the intermittent "the list updates when a file
+        // is viewed" report). Any save path that fires without a real change now costs nothing.
+        guard existing?.body != body else {
+            if body == editor.text { hasUnsavedEdits = false }
+            return
+        }
         let note = Note(id: id, body: body, createdAt: existing?.createdAt ?? now, modifiedAt: now)
         try? await repository.save(note)
         // Only clear the unsaved flag if no newer edit slipped in while we were writing.
@@ -859,20 +1015,75 @@ public final class AppModel {
 
     // MARK: - Backup
 
-    /// The suggested file name for a backup zip: `DevNotes-Backup-<DTG>.zip` (date-time group).
-    public var backupFileName: String {
+    /// A built archive: the bytes, plus the name they should be saved under. Returned as a pair so
+    /// the zip and the folder inside it can't drift apart — both are derived from the one name
+    /// stamped when the backup was built, not from two separate reads of the clock.
+    public struct Backup: Sendable {
+        /// `DevNotes-Backup-<DTG>`, without the `.zip` extension.
+        public let name: String
+        public let data: Data
+    }
+
+    /// The suggested file name for a backup zip: `DevNotes-Backup-<DTG>` (date-time group).
+    public var backupFileName: String { Self.backupName(for: Date()) }
+
+    private static func backupName(for date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
-        return "DevNotes-Backup-\(formatter.string(from: Date()))"
+        return "DevNotes-Backup-\(formatter.string(from: date))"
     }
 
-    /// Zips the whole notes directory and returns the archive's bytes. Uses the `NSFileCoordinator`
-    /// `.forUploading` read, which materialises a directory as a zip without any third-party
-    /// archiver. Throws rather than returning nil: a backup that can't be built has to say why, or
-    /// pressing the button looks like it did nothing.
-    public func createBackupData() throws -> Data {
+    /// Builds the backup archive. Throws rather than returning nil: a backup that can't be built has
+    /// to say why, or pressing the button looks like it did nothing.
+    ///
+    /// The notes directory is not zipped in place. Each note is first staged into a temporary folder
+    /// **named after the archive**, under its *title* rather than its on-disk `<UUID>.md` name, so
+    /// that unzipping `DevNotes-Backup-20260805-155658.zip` yields a
+    /// `DevNotes-Backup-20260805-155658` folder full of readable file names instead of a `Documents`
+    /// folder full of UUIDs. A `_manifest.txt` at the root maps every archived name back to the file
+    /// it came from, since the raw file name is the note's identity. That staged folder is what the
+    /// `NSFileCoordinator` `.forUploading` read turns into a zip — still no third-party archiver.
+    public func createBackup() async throws -> Backup {
         guard let directory = watchDirectory else { throw BackupError.noNotesDirectory }
+        let name = Self.backupName(for: Date())
+        let notes = (try? await repository.summaries()) ?? []
+        let entries = BackupNaming.entries(for: notes)
+
+        let fileManager = FileManager.default
+        let staging = fileManager.temporaryDirectory
+            .appendingPathComponent("DevNotesBackup-\(UUID().uuidString)", isDirectory: true)
+        let root = staging.appendingPathComponent(name, isDirectory: true)
+        defer { try? fileManager.removeItem(at: staging) }
+
+        do {
+            try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+            for entry in entries {
+                let source = directory.appendingPathComponent((entry.id as NSString).lastPathComponent)
+                let destination = root.appendingPathComponent(entry.fileName)
+                try fileManager.copyItem(at: source, to: destination)
+            }
+            let manifest = BackupNaming.manifest(
+                for: entries,
+                archiveName: name,
+                created: Date().formatted(date: .abbreviated, time: .standard)
+            )
+            try manifest.write(
+                to: root.appendingPathComponent("_manifest.txt"),
+                atomically: true,
+                encoding: .utf8
+            )
+        } catch {
+            throw BackupError.staging(error.localizedDescription)
+        }
+
+        return Backup(name: name, data: try Self.zip(root))
+    }
+
+    /// Materialises `directory` as a zip via the `NSFileCoordinator` `.forUploading` read. The
+    /// archive's single root entry is the directory's own name, which is why the staged folder is
+    /// named after the backup.
+    private static func zip(_ directory: URL) throws -> Data {
         var data: Data?
         var readError: Error?
         var coordinationError: NSError?
@@ -893,12 +1104,16 @@ public final class AppModel {
     public enum BackupError: LocalizedError {
         /// No on-disk notes directory (an in-memory repository in tests/previews).
         case noNotesDirectory
+        /// A note couldn't be copied into the staging folder the archive is built from.
+        case staging(String)
         case coordination(String)
 
         public var errorDescription: String? {
             switch self {
             case .noNotesDirectory:
                 return "There's no notes folder on this device to back up."
+            case .staging(let detail):
+                return "The notes couldn't be gathered for the backup: \(detail)"
             case .coordination(let detail):
                 return "The notes folder couldn't be archived: \(detail)"
             }

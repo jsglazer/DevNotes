@@ -18,6 +18,14 @@ struct SettingsView: View {
     @State private var backupDocument: BackupDocument?
     @State private var isExportingBackup = false
     @State private var backupError: String?
+    /// Name the archive was stamped with when it was built, so the save panel / exporter offers the
+    /// same `DevNotes-Backup-<DTG>` the folder inside the zip carries (re-reading the clock here
+    /// could hand out a name a second later than the one baked into the archive).
+    @State private var backupName = ""
+
+    /// The project's GitHub page — the README there is the full token catalog the Editor Style box
+    /// is a summary of.
+    private static let gitHubURL = URL(string: "https://github.com/jsglazer/DevNotes")!
 
     /// How the long-press-to-open-a-link gesture is described on this platform (a click-and-hold on
     /// the Mac, a long press on iOS — the same recogniser either way).
@@ -72,8 +80,26 @@ struct SettingsView: View {
         #endif
     }
 
+    /// Link out to the project's GitHub page. Shown at the top of Settings and again above the
+    /// Editor Style example, where the README's token catalog is the natural next click.
+    private static func gitHubLink(_ caption: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Link(destination: gitHubURL) {
+                Label("DevNotes on GitHub", systemImage: "arrow.up.right.square")
+            }
+            Text(caption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     private var generalTab: some View {
         Form {
+            Section {
+                Self.gitHubLink("Source, the full Editor Style token catalog, and release notes.")
+            }
+
             Section("Appearance") {
                 Picker("Theme", selection: $model.theme) {
                     ForEach(AppTheme.allCases, id: \.self) { theme in
@@ -144,7 +170,7 @@ struct SettingsView: View {
 
             Section("Backup") {
                 Button("Create Backup…") { createBackup() }
-                Text("Saves a zip of all notes, named with the current date and time — you choose where.")
+                Text("Saves a zip of all notes, named with the current date and time — you choose where. It unzips to a folder of the same name, with each note filed under its title and a `_manifest.txt` mapping those back to their original file names.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -195,7 +221,7 @@ struct SettingsView: View {
             isPresented: $isExportingBackup,
             document: backupDocument,
             contentType: .zip,
-            defaultFilename: model.backupFileName
+            defaultFilename: backupName.isEmpty ? model.backupFileName : backupName
         ) { _ in
             backupDocument = nil
         }
@@ -214,16 +240,19 @@ struct SettingsView: View {
     /// and is shown as an alert — the previous version silently swallowed a nil archive, so a failed
     /// backup was indistinguishable from a dead button.
     private func createBackup() {
-        do {
-            let data = try model.createBackupData()
-            #if os(macOS)
-            try saveBackupWithPanel(data)
-            #else
-            backupDocument = BackupDocument(data: data)
-            isExportingBackup = true
-            #endif
-        } catch {
-            backupError = error.localizedDescription
+        Task {
+            do {
+                let backup = try await model.createBackup()
+                backupName = backup.name
+                #if os(macOS)
+                try saveBackupWithPanel(backup)
+                #else
+                backupDocument = BackupDocument(data: backup.data)
+                isExportingBackup = true
+                #endif
+            } catch {
+                backupError = error.localizedDescription
+            }
         }
     }
 
@@ -233,14 +262,14 @@ struct SettingsView: View {
     /// Create Backup…" report. The app is sandboxed, so writing where the user pointed also needs
     /// the `com.apple.security.files.user-selected.read-write` entitlement, added alongside this;
     /// without it the write is refused. Any failure surfaces in the alert instead of being swallowed.
-    private func saveBackupWithPanel(_ data: Data) throws {
+    private func saveBackupWithPanel(_ backup: AppModel.Backup) throws {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.zip]
         panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "\(model.backupFileName).zip"
+        panel.nameFieldStringValue = "\(backup.name).zip"
         panel.message = "Choose where to save the DevNotes backup."
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        try data.write(to: url)
+        try backup.data.write(to: url)
     }
     #endif
 
@@ -309,6 +338,8 @@ struct SettingsView: View {
                     .onChange(of: model.styleInput) {
                         model.editor.style = model.styleSheet
                     }
+
+                Self.gitHubLink("The README lists every supported token with worked examples.")
 
                 // One worked example, right below the input box, with a one-tap insert.
                 VStack(alignment: .leading, spacing: 4) {
