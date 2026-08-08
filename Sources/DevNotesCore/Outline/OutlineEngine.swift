@@ -152,6 +152,9 @@ public struct OutlineEngine: Sendable {
     // MARK: - Move line up / down
 
     /// Moves the block of touched lines up by one line. No-op (unchanged input) at the top.
+    ///
+    /// Any ordered list the move disturbs is re-sequenced afterwards (see `ListRenumberer`), so
+    /// shuffling `2.` above `1.` leaves the markers reading `1. 2.` rather than out of order.
     public func moveLineUp(text: String, selection: TextSelection) -> TextEdit {
         let model = TextModel(text)
         let range = model.lineRange(for: selection)
@@ -161,15 +164,17 @@ public struct OutlineEngine: Sendable {
         var lines = model.lines
         let block = Array(lines[first ... last])
         let above = lines[first - 1]
-        lines.removeSubrange((first - 1) ... last)
-        lines.insert(contentsOf: block + [above], at: first - 1)
-        let newModel = TextModel(lines: lines)
-        let shift = newModel.lineStart(first - 1) - model.lineStart(first)
-        let newSelection = TextSelection(location: selection.location + shift, length: selection.length)
-        return TextEdit(text: newModel.text, selection: newSelection)
+        lines.replaceSubrange((first - 1) ... last, with: block + [above])
+        return completeMove(original: model, movedLines: lines, selection: selection, touched: (first - 1) ... last) { line in
+            if line == first - 1 { return last }
+            if (first ... last).contains(line) { return line - 1 }
+            return line
+        }
     }
 
     /// Moves the block of touched lines down by one line. No-op (unchanged input) at the bottom.
+    ///
+    /// Any ordered list the move disturbs is re-sequenced afterwards, as for `moveLineUp`.
     public func moveLineDown(text: String, selection: TextSelection) -> TextEdit {
         let model = TextModel(text)
         let range = model.lineRange(for: selection)
@@ -179,12 +184,57 @@ public struct OutlineEngine: Sendable {
         var lines = model.lines
         let block = Array(lines[first ... last])
         let below = lines[last + 1]
-        lines.removeSubrange(first ... (last + 1))
-        lines.insert(contentsOf: [below] + block, at: first)
+        lines.replaceSubrange(first ... (last + 1), with: [below] + block)
+        return completeMove(original: model, movedLines: lines, selection: selection, touched: first ... (last + 1)) { line in
+            if line == last + 1 { return first }
+            if (first ... last).contains(line) { return line + 1 }
+            return line
+        }
+    }
+
+    /// Finishes a line move: renumbers the ordered lists that `touched` disturbed, then carries the
+    /// selection across using `mapLine` (old line index -> new line index).
+    ///
+    /// The selection is remapped endpoint-by-endpoint rather than by a single offset shift, because
+    /// renumbering can change a line's length (`9. ` -> `10. `) on either side of the caret.
+    private func completeMove(
+        original: TextModel,
+        movedLines: [String],
+        selection: TextSelection,
+        touched: ClosedRange<Int>,
+        mapLine: (Int) -> Int
+    ) -> TextEdit {
+        let (lines, changes) = ListRenumberer.renumber(lines: movedLines, touching: touched)
         let newModel = TextModel(lines: lines)
-        let shift = newModel.lineStart(first + 1) - model.lineStart(first)
-        let newSelection = TextSelection(location: selection.location + shift, length: selection.length)
-        return TextEdit(text: newModel.text, selection: newSelection)
+
+        /// `anchor` is the offset used to decide which line `offset` belongs to — they differ only
+        /// for a selection end sitting on a newline, which belongs to the line it terminates.
+        func mapOffset(_ offset: Int, anchor: Int) -> Int {
+            let oldLine = original.lineIndex(ofOffset: anchor)
+            let oldLength = TextModel.utf16Length(original.lines[oldLine])
+            let column = offset - original.lineStart(oldLine)
+            let newLine = mapLine(oldLine)
+            var newColumn = column
+            if let change = changes[newLine], column >= change.bodyStart {
+                newColumn += change.delta
+            }
+            // `+ 1` keeps a selection that swallowed the trailing newline still swallowing it.
+            let maxColumn = TextModel.utf16Length(lines[newLine]) + (column > oldLength ? 1 : 0)
+            newColumn = max(0, min(newColumn, maxColumn))
+            let mapped = newModel.lineStart(newLine) + newColumn
+            return min(mapped, TextModel.utf16Length(newModel.text))
+        }
+
+        if selection.isCaret {
+            let caret = mapOffset(selection.location, anchor: selection.location)
+            return TextEdit(text: newModel.text, selection: .caret(caret))
+        }
+        let start = mapOffset(selection.location, anchor: selection.location)
+        let end = mapOffset(selection.end, anchor: max(selection.location, selection.end - 1))
+        return TextEdit(
+            text: newModel.text,
+            selection: TextSelection(location: start, length: max(0, end - start))
+        )
     }
 
     // MARK: - Heading level
