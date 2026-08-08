@@ -54,6 +54,7 @@ struct EditorPane: View {
                     similarHighlightColor: model.similarHighlightColor(for: colorScheme),
                     focusRequest: model.editor.focusRequest,
                     undoRequest: model.editor.undoRequest,
+                    scrollRequest: model.editor.scrollRequest,
                     loadGeneration: model.editor.loadGeneration,
                     openLinksOnLongPress: model.openLinksOnLongPress,
                     onKeyChord: { chord in

@@ -60,6 +60,21 @@ public final class EditorViewModel {
         undoRequest += 1
     }
 
+    /// Monotonic counter the editor surface observes: each bump scrolls the caret/selection into
+    /// view without touching the undo stack or resetting the text. A plain `selection` assignment
+    /// alone moves the caret but — on iOS — does not scroll it into view outside of a full
+    /// `load(text:selection:)`; this gives search-result / outline-heading jumps within the
+    /// already-open note a way to force that scroll on both platforms.
+    public private(set) var scrollRequest = 0
+
+    /// Moves the caret/selection to `selection` and asks the editor surface to scroll it into view,
+    /// for jumping to a match within the note that's already open (as opposed to `load`, which is
+    /// for opening a different note).
+    public func jump(to selection: TextSelection) {
+        self.selection = selection
+        scrollRequest += 1
+    }
+
     /// Loads note content for display WITHOUT triggering `onChange`/save. Use this whenever the
     /// text is being populated from disk (opening a note, or an external file change landing) so
     /// viewing a note never marks it modified.

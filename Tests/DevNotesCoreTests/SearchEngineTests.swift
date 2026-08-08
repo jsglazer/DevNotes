@@ -90,4 +90,36 @@ struct SearchEngineTests {
         let filtered = SearchEngine.filter(summaries, query: "cat", options: SearchOptions())
         #expect(filtered.map(\.id) == [NoteID("2"), NoteID("3")])
     }
+
+    @Test("Occurrences report the 1-based line number of each match")
+    func occurrencesLineNumbers() {
+        let body = "first line\nsecond cat line\nthird line\nfourth cat line"
+        let occurrences = SearchEngine.occurrences(in: body, query: "cat", options: SearchOptions())
+        #expect(occurrences.map(\.lineNumber) == [2, 4])
+    }
+
+    @Test("A short line's snippet is the whole trimmed line, no ellipsis")
+    func occurrencesShortLineSnippet() {
+        let body = "a cat sat"
+        let occurrences = SearchEngine.occurrences(in: body, query: "cat", options: SearchOptions())
+        #expect(occurrences.map(\.snippet) == ["a cat sat"])
+    }
+
+    @Test("A long line's snippet is truncated around the match with ellipses")
+    func occurrencesLongLineSnippet() {
+        let padding = String(repeating: "x", count: 100)
+        let body = "\(padding) cat \(padding)"
+        let occurrences = SearchEngine.occurrences(in: body, query: "cat", options: SearchOptions(), snippetRadius: 10)
+        let snippet = occurrences.first?.snippet ?? ""
+        #expect(snippet.hasPrefix("…"))
+        #expect(snippet.hasSuffix("…"))
+        #expect(snippet.contains("cat"))
+        #expect(snippet.count < body.count)
+    }
+
+    @Test("No occurrences for an empty or non-matching query")
+    func occurrencesEmpty() {
+        #expect(SearchEngine.occurrences(in: "no match here", query: "cat", options: SearchOptions()).isEmpty)
+        #expect(SearchEngine.occurrences(in: "a cat sat", query: "", options: SearchOptions()).isEmpty)
+    }
 }

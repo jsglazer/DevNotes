@@ -34,6 +34,9 @@ struct MarkdownTextView: View {
     /// Bumped by the model to perform one undo step on the native undo manager (the mobile
     /// toolbar's Undo button has no other path to the text view's undo stack).
     var undoRequest = 0
+    /// Bumped by the model to scroll the caret/selection into view without a full note reload
+    /// (jumping to a search result or outline heading within the already-open note).
+    var scrollRequest = 0
     /// Bumped by the model every time the text was replaced wholesale (opening/switching notes),
     /// as opposed to an in-place edit — tells the editor surface when to reset the undo stack
     /// instead of registering the change as an undoable edit.
@@ -62,6 +65,7 @@ struct MarkdownTextView: View {
             similarHighlightColor: similarHighlightColor,
             focusRequest: focusRequest,
             undoRequest: undoRequest,
+            scrollRequest: scrollRequest,
             loadGeneration: loadGeneration,
             openLinksOnLongPress: openLinksOnLongPress,
             onKeyChord: onKeyChord
@@ -88,6 +92,7 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
     var similarHighlightColor: PlatformColor?
     var focusRequest: Int
     var undoRequest: Int
+    var scrollRequest: Int
     var loadGeneration: Int
     var openLinksOnLongPress: Bool
     var onKeyChord: (@MainActor (DevNotesCore.KeyChord) -> Bool)?
@@ -291,6 +296,11 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         if context.coordinator.undoRequestChanged(undoRequest) {
             textView.undoManager?.undo()
         }
+        // A bumped scroll token re-scrolls to the (possibly unchanged) selection — covers clicking
+        // the same search/outline result twice, which the selection-diff check above would skip.
+        if context.coordinator.scrollRequestChanged(scrollRequest) {
+            textView.scrollRangeToVisible(textView.selectedRange())
+        }
 
         context.coordinator.gutter?.needsDisplay = true
     }
@@ -435,6 +445,15 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         func undoRequestChanged(_ value: Int) -> Bool {
             defer { lastUndoRequest = value }
             return lastUndoRequest != value
+        }
+
+        /// Last-honoured scroll token, so each bump re-scrolls exactly once.
+        private var lastScrollRequest = 0
+
+        /// True when the model bumped the scroll token since the last pass (records the new value).
+        func scrollRequestChanged(_ value: Int) -> Bool {
+            defer { lastScrollRequest = value }
+            return lastScrollRequest != value
         }
 
         /// True when the load generation changed since the last update (and records the new value).
@@ -655,6 +674,9 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
     var focusRequest: Int
     /// Bumped by the model to perform one undo step (the pinned toolbar's Undo button).
     var undoRequest: Int
+    /// Bumped by the model to scroll the caret/selection into view without a full note reload
+    /// (jumping to a search result or outline heading within the already-open note).
+    var scrollRequest: Int
     /// Bumped by the model every time the text was replaced wholesale (opening/switching notes),
     /// as opposed to an in-place edit — tells the editor surface when to reset the undo stack
     /// instead of registering the change as an undoable edit.
@@ -784,10 +806,11 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
             // Same-note model edit: keep the view where it was.
             textView.setContentOffset(preservedOffset, animated: false)
         }
-        if isNoteLoad {
-            // Opening/switching notes: scroll to wherever the caret landed (last line, saved
-            // position, or a search match) once this layout pass settles — without this the caret
-            // moved but the view stayed at the top.
+        // Opening/switching notes always needs this scroll (last line, saved position, or a search
+        // match). A bumped scroll token additionally forces it for a same-note jump (search result
+        // or outline heading click) — otherwise the caret moves but the view doesn't follow it,
+        // since a plain `selection` assignment alone has no scroll effect on iOS outside a load.
+        if isNoteLoad || context.coordinator.scrollRequestChanged(scrollRequest) {
             DispatchQueue.main.async { [weak textView] in
                 guard let textView else { return }
                 textView.scrollRangeToVisible(textView.selectedRange)
@@ -930,6 +953,15 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         func undoRequestChanged(_ value: Int) -> Bool {
             defer { lastUndoRequest = value }
             return lastUndoRequest != value
+        }
+
+        /// Last-honoured scroll token, so each bump re-scrolls exactly once.
+        private var lastScrollRequest = 0
+
+        /// True when the model bumped the scroll token since the last pass (records the new value).
+        func scrollRequestChanged(_ value: Int) -> Bool {
+            defer { lastScrollRequest = value }
+            return lastScrollRequest != value
         }
 
         /// True when the load generation changed since the last update (and records the new value).

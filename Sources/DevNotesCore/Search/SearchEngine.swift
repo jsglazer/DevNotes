@@ -105,4 +105,56 @@ public enum SearchEngine {
                 || matches(summary.body, query: query, options: options)
         }
     }
+
+    /// Every match of `query` in `body`, in document order, with the 1-based line it falls on and a
+    /// snippet of the surrounding text — for listing individual occurrences under a file name in
+    /// cross-file search results (as opposed to `filter`, which only says whether a note matches).
+    public static func occurrences(
+        in body: String,
+        query: String,
+        options: SearchOptions,
+        snippetRadius: Int = 40
+    ) -> [SearchOccurrence] {
+        let ranges = matchRanges(body, query: query, options: options)
+        guard ranges.isEmpty == false else { return [] }
+        let model = TextModel(body)
+        let ns = body as NSString
+        return ranges.map { range in
+            let lineIndex = model.lineIndex(ofOffset: range.location)
+            let lineStart = model.lineStart(lineIndex)
+            let rest = NSRange(location: lineStart, length: ns.length - lineStart)
+            let newline = ns.range(of: "\n", options: [], range: rest)
+            let lineEnd = newline.location == NSNotFound ? ns.length : newline.location
+            let lineText = ns.substring(with: NSRange(location: lineStart, length: lineEnd - lineStart))
+            let snippet = makeSnippet(
+                line: lineText,
+                matchOffsetInLine: range.location - lineStart,
+                matchLength: range.length,
+                radius: snippetRadius
+            )
+            return SearchOccurrence(lineNumber: lineIndex + 1, snippet: snippet, selection: range)
+        }
+    }
+
+    /// A window of `line` centered on the match, trimmed with an ellipsis on either truncated edge —
+    /// full short lines pass through untouched.
+    private static func makeSnippet(line: String, matchOffsetInLine: Int, matchLength: Int, radius: Int) -> String {
+        let ns = line as NSString
+        let start = max(0, matchOffsetInLine - radius)
+        let end = min(ns.length, matchOffsetInLine + matchLength + radius)
+        var snippet = ns.substring(with: NSRange(location: start, length: end - start))
+            .trimmingCharacters(in: .whitespaces)
+        if start > 0 { snippet = "…" + snippet }
+        if end < ns.length { snippet += "…" }
+        return snippet
+    }
+}
+
+/// A single match of the search query within a note's body, for the per-occurrence search results
+/// list (each note's matches are listed under its bolded title).
+public struct SearchOccurrence: Identifiable, Equatable, Sendable {
+    public let lineNumber: Int
+    public let snippet: String
+    public let selection: TextSelection
+    public var id: Int { selection.location }
 }

@@ -20,8 +20,10 @@ struct AppCommands: Commands {
                 .disabled(model.selectedID == nil)
             Button("Export as Plain Text…") { Exporter.exportText(model: model) }
                 .disabled(model.selectedID == nil)
-            Button("Save as PDF…") { Exporter.exportPDF(model: model) }
+            Button("Save as PDF…", systemImage: "doc.richtext") { Exporter.exportPDF(model: model) }
                 .disabled(model.selectedID == nil)
+            Divider()
+            Button("Create Backup…", systemImage: "archivebox") { Exporter.exportBackup(model: model) }
         }
 
         // Move-line lives in the Edit menu, next to the other text-editing actions.

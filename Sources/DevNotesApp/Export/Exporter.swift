@@ -47,6 +47,18 @@ enum Exporter {
         try? data.write(to: url)
     }
 
+    /// Builds a full backup archive and asks the user where to save it, mirroring the Settings
+    /// window's "Create Backup…" button so the same action is reachable from the File menu. Failures
+    /// are swallowed like the other menu exports here — the Settings button is the place that
+    /// surfaces a backup error in an alert.
+    static func exportBackup(model: AppModel) {
+        Task {
+            guard let backup = try? await model.createBackup() else { return }
+            guard let url = savePanel(defaultName: "\(backup.name).zip", type: .zip) else { return }
+            try? backup.data.write(to: url)
+        }
+    }
+
     // MARK: - Helpers
 
     private static func writeText(model: AppModel, ext: String, type: UTType) {
