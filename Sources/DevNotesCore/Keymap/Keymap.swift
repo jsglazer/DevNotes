@@ -48,7 +48,8 @@ public struct Keymap: Sendable {
         .selectToBottom: KeyChord(modifiers: [.shift, .command], key: "down"),
         .wrapText: KeyChord(modifiers: [.shift, .command], key: "w"),
         .showLineNumbers: KeyChord(modifiers: [.shift, .command], key: "n"),
-        .insertDateTime: KeyChord(modifiers: [.control, .option], key: "d")
+        .insertDateTime: KeyChord(modifiers: [.control, .option], key: "d"),
+        .toggleOutline: KeyChord(modifiers: [.shift, .command], key: "o")
     ])
 
     // MARK: - Loading

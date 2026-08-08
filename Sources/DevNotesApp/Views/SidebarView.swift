@@ -2,10 +2,10 @@ import DevNotesCore
 import SwiftUI
 
 /// The collapsible left panel: search bar over the modified-date-sorted file list, with an optional
-/// heading-outline panel below it. Toggling the panel is bound to ⌘B by the root view.
+/// heading-outline panel below it (`model.isOutlineVisible`, toggled from `EditorToolbar`). The
+/// sidebar itself collapses via ⌘B, bound by the root view.
 struct SidebarView: View {
     @Bindable var model: AppModel
-    @State private var isOutlineVisible = false
 
     /// Base file-name point size (one point larger than the previous `.body`). Fixed — the ⌘+/⌘-
     /// zoom scales only the editor content area, never this file list. Platform bodies differ, so
@@ -49,7 +49,7 @@ struct SidebarView: View {
             }
             .listStyle(.sidebar)
 
-            if isOutlineVisible {
+            if model.isOutlineVisible {
                 Divider()
                 OutlinePanelView(model: model)
                     .frame(maxHeight: 220)
@@ -63,13 +63,6 @@ struct SidebarView: View {
                     Label("New Note", systemImage: "square.and.pencil")
                 }
                 .keyboardShortcut("n", modifiers: .command)
-            }
-            ToolbarItem {
-                Button {
-                    isOutlineVisible.toggle()
-                } label: {
-                    Label("Toggle Outline", systemImage: "list.bullet.indent")
-                }
             }
         }
     }

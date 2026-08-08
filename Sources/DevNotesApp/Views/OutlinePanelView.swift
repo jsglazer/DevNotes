@@ -13,26 +13,57 @@ struct OutlinePanelView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 2) {
-                if headings.isEmpty {
-                    Text(model.selectedID == nil ? "No note open" : "No headings in this note")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(8)
-                } else {
-                    ForEach(headings) { heading in
-                        row(for: heading)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                Button {
+                    collapsedIDs.removeAll()
+                } label: {
+                    Image(systemName: "rectangle.expand.vertical")
+                        .font(.caption2)
+                }
+                .buttonStyle(.plain)
+                .help("Expand All")
+                .disabled(headings.isEmpty)
+
+                Button {
+                    collapsedIDs = collapsibleIDs(in: headings)
+                } label: {
+                    Image(systemName: "rectangle.compress.vertical")
+                        .font(.caption2)
+                }
+                .buttonStyle(.plain)
+                .help("Collapse All")
+                .disabled(headings.isEmpty)
+
+                Spacer()
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    if headings.isEmpty {
+                        Text(model.selectedID == nil ? "No note open" : "No headings in this note")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(8)
+                    } else {
+                        ForEach(headings) { heading in
+                            row(for: heading, depth: 0)
+                        }
                     }
                 }
+                .padding(.vertical, 4)
             }
-            .padding(.vertical, 4)
         }
     }
 
     /// Type-erased because this recursively calls itself for `heading.children` — a `some View`
-    /// return would otherwise define the opaque type in terms of itself.
-    private func row(for heading: OutlineHeading) -> AnyView {
+    /// return would otherwise define the opaque type in terms of itself. `depth` is the row's
+    /// position in the *visible* outline tree (0 for a top-level row), not the raw `#` count, so a
+    /// note whose shallowest heading is `##` (or deeper) still renders flush against the panel edge.
+    private func row(for heading: OutlineHeading, depth: Int) -> AnyView {
         AnyView(VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 if heading.children.isEmpty {
@@ -58,11 +89,11 @@ struct OutlinePanelView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.leading, CGFloat(heading.level - 1) * 12)
+            .padding(.leading, CGFloat(depth) * 12)
 
             if collapsedIDs.contains(heading.id) == false {
                 ForEach(heading.children) { child in
-                    row(for: child)
+                    row(for: child, depth: depth + 1)
                 }
             }
         })
@@ -74,5 +105,15 @@ struct OutlinePanelView: View {
         } else {
             collapsedIDs.insert(id)
         }
+    }
+
+    /// IDs of every heading (at any depth) that has children — the full set "Collapse All" closes.
+    private func collapsibleIDs(in headings: [OutlineHeading]) -> Set<Int> {
+        var ids: Set<Int> = []
+        for heading in headings where heading.children.isEmpty == false {
+            ids.insert(heading.id)
+            ids.formUnion(collapsibleIDs(in: heading.children))
+        }
+        return ids
     }
 }

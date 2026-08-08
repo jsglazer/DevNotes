@@ -69,6 +69,8 @@ struct AppCommands: Commands {
                 .keyboardShortcut(shortcut(.wrapText))
             Toggle("Show Line Numbers", isOn: $model.showLineNumbers)
                 .keyboardShortcut(shortcut(.showLineNumbers))
+            Toggle("Show Outline", isOn: $model.isOutlineVisible)
+                .keyboardShortcut(shortcut(.toggleOutline))
             Toggle("Check Spelling While Typing", isOn: $model.spellCheck)
 
             Picker("Theme", selection: $model.theme) {

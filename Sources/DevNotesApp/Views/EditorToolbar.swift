@@ -11,6 +11,9 @@ struct EditorToolbar: View {
     /// Whether the "Highlight Similar" toggle is currently active.
     var isHighlightSimilarActive: Bool
     var onToggleHighlightSimilar: () -> Void
+    /// Whether the heading-outline panel is currently shown.
+    var isOutlineVisible: Bool
+    var onToggleOutline: () -> Void
     /// Mobile-only extras (nil hides the button): insert date/time, undo, and zoom. iOS has no
     /// menu bar or ⌘-shortcuts, so these actions need on-screen buttons.
     var onInsertDateTime: (() -> Void)?
@@ -51,6 +54,7 @@ struct EditorToolbar: View {
             .fixedSize()
             Divider().frame(height: 16)
             toggleButton("highlighter", "Highlight Similar", isOn: isHighlightSimilarActive, action: onToggleHighlightSimilar)
+            toggleButton("list.bullet.indent", "Toggle Outline", isOn: isOutlineVisible, action: onToggleOutline)
             if onUndo != nil || onInsertDateTime != nil || onZoomOut != nil || onZoomIn != nil {
                 Divider().frame(height: 16)
             }

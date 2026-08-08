@@ -147,6 +147,10 @@ public final class AppModel {
     /// the currently selected text is highlighted across the open note. Session-only (like Find's
     /// `isPresented`) — it always starts off on launch.
     public var highlightSimilarActive = false
+    /// Whether the heading-outline panel is shown below the sidebar's file list. Lives on the model
+    /// (rather than local `@State` on `SidebarView`) because it's toggled from `EditorToolbar`, which
+    /// sits in a different branch of the view tree.
+    public var isOutlineVisible = false
     /// Background colours painted over occurrences the "Highlight Similar" button finds — one per
     /// theme (a colour bright enough for light mode washed the text out in dark mode). Persisted as
     /// `#rrggbb` hex, same as the current-line colours.
@@ -764,6 +768,7 @@ public final class AppModel {
         case .selectToBottom: selectToBottom()
         case .wrapText: wrapText.toggle()
         case .showLineNumbers: showLineNumbers.toggle()
+        case .toggleOutline: isOutlineVisible.toggle()
         case .nextNote: Task { await selectNext() }
         case .previousNote: Task { await selectPrevious() }
         case .insertDateTime: insertDateTime()

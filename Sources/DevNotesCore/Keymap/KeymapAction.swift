@@ -18,6 +18,7 @@ public enum KeymapAction: String, Sendable, CaseIterable, Equatable {
     case wrapText
     case showLineNumbers
     case insertDateTime
+    case toggleOutline
 
     /// Human-readable label for menus and the Settings shortcuts list.
     public var title: String {
@@ -33,6 +34,7 @@ public enum KeymapAction: String, Sendable, CaseIterable, Equatable {
         case .wrapText: return "Wrap Text"
         case .showLineNumbers: return "Show Line Numbers"
         case .insertDateTime: return "Insert Date & Time"
+        case .toggleOutline: return "Toggle Outline"
         }
     }
 }

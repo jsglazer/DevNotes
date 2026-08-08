@@ -16,7 +16,9 @@ struct EditorPane: View {
                 EditorToolbar(
                     editor: model.editor,
                     isHighlightSimilarActive: model.highlightSimilarActive,
-                    onToggleHighlightSimilar: model.toggleHighlightSimilar
+                    onToggleHighlightSimilar: model.toggleHighlightSimilar,
+                    isOutlineVisible: model.isOutlineVisible,
+                    onToggleOutline: { model.isOutlineVisible.toggle() }
                 )
                 Divider()
                 if model.find.isPresented {
@@ -31,6 +33,8 @@ struct EditorPane: View {
                     iconSize: 20,
                     isHighlightSimilarActive: model.highlightSimilarActive,
                     onToggleHighlightSimilar: model.toggleHighlightSimilar,
+                    isOutlineVisible: model.isOutlineVisible,
+                    onToggleOutline: { model.isOutlineVisible.toggle() },
                     onInsertDateTime: model.insertDateTime,
                     onUndo: model.editor.requestUndo,
                     onZoomOut: model.zoomOut,
