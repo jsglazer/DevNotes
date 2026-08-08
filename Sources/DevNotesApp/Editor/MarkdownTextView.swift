@@ -185,6 +185,9 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         let bottomInset = CGFloat(max(0, bottomPadding))
         if scrollView.contentInsets.bottom != bottomInset {
             scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
+            // The scrollable extent just changed under the viewport — re-lay it before it can paint
+            // a stale (partly empty) frame.
+            context.coordinator.relayoutViewport(of: scrollView)
         }
 
         // Show/hide the gutter by toggling its overlay and the text view's LEFT inset (so the text
@@ -273,6 +276,7 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             // Keep the caret on-screen after a command-driven selection change (move line,
             // select-to-edge, open-at-last-line) — the view no longer scrolls it off the bottom.
             textView.scrollRangeToVisible(desired)
+            context.coordinator.relayoutViewport(of: scrollView)
         }
 
         // A bumped focus token asks the editor to take first responder (new/opened note) so the
@@ -396,7 +400,26 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             if scrollView.contentView.bounds.origin != origin {
                 scrollView.contentView.setBoundsOrigin(origin)
                 scrollView.reflectScrolledClipView(scrollView.contentView)
+                relayoutViewport(of: scrollView)
             }
+        }
+
+        /// Re-lays the TextKit 2 viewport for wherever the clip view now sits, then repaints.
+        ///
+        /// TextKit 2 only builds layout fragments for the current viewport, and both the text and the
+        /// line-number gutter draw *only* those fragments. Moving the clip view programmatically —
+        /// pinning an origin back after a re-colour, following the caret with `scrollRangeToVisible`,
+        /// changing the scroll-past-end inset — can leave the newly exposed band with no fragments at
+        /// all, so it renders as bare background (with no line numbers beside it) until the next real
+        /// scroll happens to re-trigger layout. That is the "blank area at the top of the text panel"
+        /// on notes past roughly a screenful, where TextKit 2 stops laying the whole document out
+        /// eagerly. Asking the viewport controller to lay out now closes the gap in the same pass.
+        @MainActor
+        func relayoutViewport(of scrollView: NSScrollView) {
+            guard let textView = scrollView.documentView as? NSTextView else { return }
+            textView.textLayoutManager?.textViewportLayoutController.layoutViewport()
+            textView.needsDisplay = true
+            gutter?.needsDisplay = true
         }
 
         /// True when the model bumped the focus token since the last pass (records the new value).
@@ -555,6 +578,9 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             }
             textView.setSelectedRange(NSRange(location: edit.selection.location, length: edit.selection.length))
             textView.scrollRangeToVisible(textView.selectedRange())
+            if let scrollView = textView.enclosingScrollView {
+                relayoutViewport(of: scrollView)
+            }
             return true
         }
 
@@ -584,8 +610,12 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
                 }
                 didHighlight(text: textView.string, style: parent.style)
             }
-            // Follow the caret as the user types so text added at the bottom isn't clipped.
+            // Follow the caret as the user types so text added at the bottom isn't clipped, then
+            // re-lay the viewport for wherever that left the clip view.
             textView.scrollRangeToVisible(range)
+            if let scrollView = textView.enclosingScrollView {
+                relayoutViewport(of: scrollView)
+            }
             textView.needsDisplay = true
             gutter?.needsDisplay = true
         }
