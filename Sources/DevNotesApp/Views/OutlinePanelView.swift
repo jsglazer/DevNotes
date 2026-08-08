@@ -37,7 +37,8 @@ struct OutlinePanelView: View {
 
                 Spacer()
             }
-            .padding(.horizontal, 8)
+            .padding(.leading, 6)
+            .padding(.trailing, 8)
             .padding(.vertical, 4)
             Divider()
 
@@ -54,6 +55,8 @@ struct OutlinePanelView: View {
                         }
                     }
                 }
+                // ~2mm so a top-level (depth 0) row doesn't sit flush against the panel edge.
+                .padding(.leading, 6)
                 .padding(.vertical, 4)
             }
         }

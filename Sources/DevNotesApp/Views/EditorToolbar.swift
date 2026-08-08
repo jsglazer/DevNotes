@@ -14,6 +14,10 @@ struct EditorToolbar: View {
     /// Whether the heading-outline panel is currently shown.
     var isOutlineVisible: Bool
     var onToggleOutline: () -> Void
+    /// Export actions mirrored from the File menu. Exporter is macOS-only (`NSSavePanel`), so these
+    /// are nil on iOS and the buttons don't render there.
+    var onExportPDF: (() -> Void)?
+    var onCreateBackup: (() -> Void)?
     /// Mobile-only extras (nil hides the button): insert date/time, undo, and zoom. iOS has no
     /// menu bar or ⌘-shortcuts, so these actions need on-screen buttons.
     var onInsertDateTime: (() -> Void)?
@@ -55,6 +59,15 @@ struct EditorToolbar: View {
             Divider().frame(height: 16)
             toggleButton("highlighter", "Highlight Similar", isOn: isHighlightSimilarActive, action: onToggleHighlightSimilar)
             toggleButton("list.bullet.indent", "Toggle Outline", isOn: isOutlineVisible, action: onToggleOutline)
+            if onExportPDF != nil || onCreateBackup != nil {
+                Divider().frame(height: 16)
+            }
+            if let onExportPDF {
+                button("doc.richtext", "Save as PDF…", action: onExportPDF)
+            }
+            if let onCreateBackup {
+                button("archivebox", "Create Backup…", action: onCreateBackup)
+            }
             if onUndo != nil || onInsertDateTime != nil || onZoomOut != nil || onZoomIn != nil {
                 Divider().frame(height: 16)
             }

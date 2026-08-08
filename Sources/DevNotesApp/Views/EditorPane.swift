@@ -18,7 +18,9 @@ struct EditorPane: View {
                     isHighlightSimilarActive: model.highlightSimilarActive,
                     onToggleHighlightSimilar: model.toggleHighlightSimilar,
                     isOutlineVisible: model.isOutlineVisible,
-                    onToggleOutline: { model.isOutlineVisible.toggle() }
+                    onToggleOutline: { model.isOutlineVisible.toggle() },
+                    onExportPDF: { Exporter.exportPDF(model: model) },
+                    onCreateBackup: { Exporter.exportBackup(model: model) }
                 )
                 Divider()
                 if model.find.isPresented {
