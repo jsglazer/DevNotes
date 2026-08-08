@@ -3,7 +3,9 @@ import SwiftUI
 
 /// Root layout.
 /// - macOS: collapsible sidebar (⌘B) + editor pane, conflict merge surfaced as a sheet.
-/// - iOS: single-pane editor with a floating top bar; the note list and outline tools are
+/// - iPadOS: the same collapsible `NavigationSplitView` sidebar as macOS, so the outline panel
+///   and file list are always reachable without a popup.
+/// - iPhone: single-pane editor with a floating top bar; the note list and outline tools are
 ///   presented as sheets rather than a split view, since NavigationSplitView's compact-width
 ///   collapse behaviour doesn't give a usable phone layout for this app.
 struct ContentView: View {
@@ -54,7 +56,11 @@ struct ContentView: View {
         #if os(macOS)
         macBody
         #else
-        iosBody
+        if Platform.isPad {
+            padBody
+        } else {
+            iosBody
+        }
         #endif
     }
 
@@ -73,6 +79,7 @@ struct ContentView: View {
                 } label: {
                     Label("Toggle Sidebar", systemImage: "sidebar.left")
                 }
+                .help("Toggle Sidebar")
                 // ⌘B is owned by the View-menu command so the shortcut isn't double-bound.
             }
             // The version moved to the bottom-left status bar (EditorStatusBar).
@@ -96,35 +103,56 @@ struct ContentView: View {
         .preferredColorScheme(model.theme.colorScheme)
     }
     #else
+    /// The note-title + file-name row shown above `IOSTopBar` on both iPhone and iPad.
+    @ViewBuilder
+    private var noteTitleRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            if let selectedID = model.selectedID {
+                Text(model.activeTitle.isEmpty ? "Untitled" : model.activeTitle)
+                    .font(.headline.bold())
+                    .lineLimit(1)
+                // The file name on disk, small and secondary next to the title — shown
+                // only when it carries information. Notes DevNotes creates are named
+                // `<UUID>.md`, and printing that UUID here was the "long series of
+                // characters" at the top of the screen (see `NoteID.displayFileName`).
+                if let fileName = selectedID.displayFileName {
+                    Text(fileName)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+    }
+
+    /// Settings sheet shared by `iosBody` and `padBody`, gated on `isSettingsPresented`.
+    private var settingsSheet: some View {
+        NavigationStack {
+            SettingsView(model: model)
+                .navigationTitle("Settings")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { isSettingsPresented = false }
+                    }
+                }
+        }
+    }
+
     private var iosBody: some View {
         EditorPane(model: model)
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        if let selectedID = model.selectedID {
-                            Text(model.activeTitle.isEmpty ? "Untitled" : model.activeTitle)
-                                .font(.headline.bold())
-                                .lineLimit(1)
-                            // The file name on disk, small and secondary next to the title — shown
-                            // only when it carries information. Notes DevNotes creates are named
-                            // `<UUID>.md`, and printing that UUID here was the "long series of
-                            // characters" at the top of the screen (see `NoteID.displayFileName`).
-                            if let fileName = selectedID.displayFileName {
-                                Text(fileName)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                            }
-                        }
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
+                    noteTitleRow
                     IOSTopBar(
                         editor: model.editor,
                         onShowNotes: { isNotesListPresented = true },
-                        onNewNote: { Task { await model.newNote() } }
+                        onNewNote: { Task { await model.newNote() } },
+                        onSearch: { isNotesListPresented = true }
                     )
                 }
                 .background(.bar)
@@ -144,23 +172,13 @@ struct ContentView: View {
                                 } label: {
                                     Image(systemName: "gearshape")
                                 }
+                                .help("Settings")
                             }
                             ToolbarItem(placement: .confirmationAction) {
                                 Button("Done") { isNotesListPresented = false }
                             }
                         }
-                        .sheet(isPresented: $isSettingsPresented) {
-                            NavigationStack {
-                                SettingsView(model: model)
-                                    .navigationTitle("Settings")
-                                    .navigationBarTitleDisplayMode(.inline)
-                                    .toolbar {
-                                        ToolbarItem(placement: .confirmationAction) {
-                                            Button("Done") { isSettingsPresented = false }
-                                        }
-                                    }
-                            }
-                        }
+                        .sheet(isPresented: $isSettingsPresented) { settingsSheet }
                 }
             }
             .onChange(of: model.selectedID) { _, _ in isNotesListPresented = false }
@@ -174,6 +192,58 @@ struct ContentView: View {
                 }
             }
             .preferredColorScheme(model.theme.colorScheme)
+    }
+
+    /// iPad layout: a persistent `NavigationSplitView` sidebar (file list + outline panel), the
+    /// same one macOS uses, instead of iPhone's popup sheet.
+    private var padBody: some View {
+        NavigationSplitView(columnVisibility: $model.columnVisibility) {
+            SidebarView(model: model)
+                .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 420)
+        } detail: {
+            EditorPane(model: model)
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    VStack(spacing: 0) {
+                        noteTitleRow
+                        IOSTopBar(
+                            editor: model.editor,
+                            onShowNotes: nil,
+                            onNewNote: { Task { await model.newNote() } },
+                            onSearch: { withAnimation { model.columnVisibility = .all } }
+                        )
+                    }
+                    .background(.bar)
+                }
+        }
+        .toolbar {
+            ToolbarItem {
+                Button {
+                    withAnimation { model.toggleSidebar() }
+                } label: {
+                    Label("Toggle Sidebar", systemImage: "sidebar.left")
+                }
+                .help("Toggle Sidebar")
+            }
+            ToolbarItem {
+                Button {
+                    isSettingsPresented = true
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .help("Settings")
+            }
+        }
+        .sheet(isPresented: $isSettingsPresented) { settingsSheet }
+        .task {
+            await model.bootstrap()
+            await model.startSyncIfNeeded()
+        }
+        .sheet(item: firstConflict) { conflict in
+            MergeView(conflict: conflict, filePath: model.fullPath(for: conflict.id) ?? conflict.id.rawValue) { mergedBody in
+                Task { await model.resolveConflict(conflict.id, mergedBody: mergedBody) }
+            }
+        }
+        .preferredColorScheme(model.theme.colorScheme)
     }
     #endif
 
@@ -192,14 +262,20 @@ struct ContentView: View {
 /// tags exist in DevNotesCore, so there's no tag row here).
 private struct IOSTopBar: View {
     var editor: EditorViewModel
-    var onShowNotes: () -> Void
+    /// Opens the notes-list sheet. `nil` on iPad, where the sidebar is always present so this
+    /// circle button would be redundant.
+    var onShowNotes: (() -> Void)?
     var onNewNote: () -> Void
+    /// Jumps to search — the notes sheet on iPhone, or reveals the sidebar on iPad.
+    var onSearch: () -> Void
 
     var body: some View {
         // Sizes are ~20% larger than the original bar so the controls are easier to hit on a phone.
         HStack(spacing: 14) {
-            circleButton("doc.text", action: onShowNotes)
-            circleButton("plus", action: onNewNote)
+            if let onShowNotes {
+                circleButton("doc.text", help: "Show Notes", action: onShowNotes)
+            }
+            circleButton("plus", help: "New Note", action: onNewNote)
             Spacer()
             HStack(spacing: 22) {
                 Menu {
@@ -209,10 +285,11 @@ private struct IOSTopBar: View {
                 } label: {
                     Image(systemName: "chevron.down")
                 }
-                Button(action: onShowNotes) {
+                .help("Heading")
+                Button(action: onSearch) {
                     Image(systemName: "magnifyingglass")
-                    // Search lives inside the notes-list sheet; this jumps straight there.
                 }
+                .help("Search")
             }
             .font(.system(size: 19, weight: .medium))
             .padding(.horizontal, 19)
@@ -225,13 +302,14 @@ private struct IOSTopBar: View {
         .padding(.vertical, 10)
     }
 
-    private func circleButton(_ systemImage: String, action: @escaping () -> Void) -> some View {
+    private func circleButton(_ systemImage: String, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 20, weight: .medium))
                 .frame(width: 53, height: 53)
                 .background(Circle().fill(Color.gray.opacity(0.15)))
         }
+        .help(help)
     }
 }
 #endif

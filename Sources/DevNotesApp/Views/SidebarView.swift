@@ -63,6 +63,7 @@ struct SidebarView: View {
                     Label("New Note", systemImage: "square.and.pencil")
                 }
                 .keyboardShortcut("n", modifiers: .command)
+                .help("New Note")
             }
         }
     }

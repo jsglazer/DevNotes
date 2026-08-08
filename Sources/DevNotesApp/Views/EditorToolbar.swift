@@ -56,6 +56,7 @@ struct EditorToolbar: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
+            .help("Heading")
             Divider().frame(height: 16)
             toggleButton("highlighter", "Highlight Similar", isOn: isHighlightSimilarActive, action: onToggleHighlightSimilar)
             toggleButton("list.bullet.indent", "Toggle Outline", isOn: isOutlineVisible, action: onToggleOutline)

@@ -21,6 +21,16 @@ enum Platform {
         return "Device"
         #endif
     }
+
+    /// True on iPad only — used to give iPad a persistent sidebar like macOS while iPhone keeps
+    /// its single-pane, sheet-based layout.
+    static var isPad: Bool {
+        #if os(iOS)
+        return UIDevice.current.userInterfaceIdiom == .pad
+        #else
+        return false
+        #endif
+    }
 }
 
 /// The marketing version (`CFBundleShortVersionString`), shown in small text on the main screen.
