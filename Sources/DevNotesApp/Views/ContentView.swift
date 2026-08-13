@@ -104,8 +104,15 @@ struct ContentView: View {
     }
     #else
     /// The note-title + file-name row shown above `IOSTopBar` on both iPhone and iPad.
+    ///
+    /// `showsSettingsButton` is iPad-only: `padBody`'s `NavigationSplitView` toolbar buttons
+    /// never render on iPadOS's redesigned split-view chrome (confirmed via the iPad Simulator —
+    /// no system top-bar strip appears in the detail column at all, regardless of placement), so
+    /// Settings needs its own reachable control. This custom safeAreaInset bar is proven to
+    /// render (the +/search buttons below it work), so the gear lives here instead of fighting
+    /// the OS toolbar.
     @ViewBuilder
-    private var noteTitleRow: some View {
+    private func noteTitleRow(showsSettingsButton: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             if let selectedID = model.selectedID {
                 Text(model.activeTitle.isEmpty ? "Untitled" : model.activeTitle)
@@ -124,6 +131,14 @@ struct ContentView: View {
                 }
             }
             Spacer()
+            if showsSettingsButton {
+                Button {
+                    isSettingsPresented = true
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .help("Settings")
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
@@ -147,7 +162,7 @@ struct ContentView: View {
         EditorPane(model: model)
             .safeAreaInset(edge: .top, spacing: 0) {
                 VStack(spacing: 0) {
-                    noteTitleRow
+                    noteTitleRow()
                     IOSTopBar(
                         editor: model.editor,
                         onShowNotes: { isNotesListPresented = true },
@@ -204,7 +219,7 @@ struct ContentView: View {
             EditorPane(model: model)
                 .safeAreaInset(edge: .top, spacing: 0) {
                     VStack(spacing: 0) {
-                        noteTitleRow
+                        noteTitleRow(showsSettingsButton: true)
                         IOSTopBar(
                             editor: model.editor,
                             onShowNotes: nil,
@@ -220,6 +235,12 @@ struct ContentView: View {
         // sets this for the same reason (see its .navigationTitle above).
         .navigationTitle(model.activeTitle.isEmpty ? "DevNotes" : model.activeTitle)
         .toolbar {
+            // Confirmed via the iPad Simulator (iOS 26 SDK) that NavigationSplitView's detail
+            // column renders no system top-bar strip at all here, so nothing declared in this
+            // block is actually reaching the screen — Settings now lives in noteTitleRow's
+            // safeAreaInset bar instead (proven to render). Left in place only in case an older
+            // iOS still honors it; harmless either way since the sidebar already has its own
+            // native collapse affordance.
             ToolbarItem {
                 Button {
                     withAnimation { model.toggleSidebar() }
@@ -227,14 +248,6 @@ struct ContentView: View {
                     Label("Toggle Sidebar", systemImage: "sidebar.left")
                 }
                 .help("Toggle Sidebar")
-            }
-            ToolbarItem {
-                Button {
-                    isSettingsPresented = true
-                } label: {
-                    Image(systemName: "gearshape")
-                }
-                .help("Settings")
             }
         }
         .sheet(isPresented: $isSettingsPresented) { settingsSheet }
