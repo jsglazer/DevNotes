@@ -215,6 +215,10 @@ struct ContentView: View {
                     .background(.bar)
                 }
         }
+        // Without a navigation title, NavigationSplitView renders no toolbar bar on iPadOS —
+        // the sidebar-toggle and gear buttons below would be declared but never shown. macBody
+        // sets this for the same reason (see its .navigationTitle above).
+        .navigationTitle(model.activeTitle.isEmpty ? "DevNotes" : model.activeTitle)
         .toolbar {
             ToolbarItem {
                 Button {
