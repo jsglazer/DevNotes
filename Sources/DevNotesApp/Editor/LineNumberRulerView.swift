@@ -70,7 +70,12 @@ final class MacLineNumberGutter: NSView {
         var lineNumber = 1
         var countedTo = 0
         layoutManager.enumerateTextLayoutFragments(from: viewport.location, options: []) { fragment in
-            guard fragment.rangeInElement.location.compare(viewport.endLocation) == .orderedAscending else {
+            // Use `!= .orderedDescending` (not `== .orderedAscending`) so a fragment whose location
+            // lands exactly on `viewport.endLocation` — e.g. the empty trailing line created by a
+            // final newline, once the whole document fits in the viewport — still gets numbered.
+            // The caret has no such boundary check, so excluding that fragment left the gutter one
+            // line short of where the caret actually renders.
+            guard fragment.rangeInElement.location.compare(viewport.endLocation) != .orderedDescending else {
                 return false
             }
             let offset = min(contentManager.offset(from: documentStart, to: fragment.rangeInElement.location), string.length)
