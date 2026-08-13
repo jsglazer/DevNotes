@@ -1391,6 +1391,28 @@ final class IOSLineNumberGutter: UIView {
                     withAttributes: attributes
                 )
             }
+
+            // TextKit 2 doesn't give a trailing blank line (the empty line after a final newline)
+            // its own top-level fragment — it folds it in as a second, zero-length internal
+            // `textLineFragment` on the document's LAST fragment. The caret still renders there
+            // (caret placement works at line-fragment granularity, not just top-level fragments),
+            // so without this the gutter's last number sits one full line above where the caret
+            // actually sits. Only the true final fragment can carry this phantom line — a wrapped
+            // continuation row always has a non-zero `characterRange`, so this never fires there.
+            if fragment.rangeInElement.endLocation.compare(contentManager.documentRange.endLocation) == .orderedSame,
+               fragment.textLineFragments.count > 1,
+               let phantom = fragment.textLineFragments.last,
+               phantom.characterRange.length == 0 {
+                let phantomY = fragmentFrame.minY + phantom.typographicBounds.minY + insetTop - offsetY
+                if phantomY + phantom.typographicBounds.height >= rect.minY, phantomY <= rect.maxY {
+                    let label = "\(lineNumber + 1)" as NSString
+                    let size = label.size(withAttributes: attributes)
+                    label.draw(
+                        at: CGPoint(x: bounds.maxX - size.width - 6, y: phantomY),
+                        withAttributes: attributes
+                    )
+                }
+            }
             return true
         }
     }
