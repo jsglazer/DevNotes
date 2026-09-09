@@ -11,6 +11,19 @@ struct SearchBarView: View {
             TextField("Search", text: $model.searchQuery)
                 .textFieldStyle(.roundedBorder)
                 .autocorrectionDisabled()
+                .overlay(alignment: .trailing) {
+                    if !model.searchQuery.isEmpty {
+                        Button {
+                            model.searchQuery = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.trailing, 6)
+                        .help("Clear search")
+                    }
+                }
 
             HStack(spacing: 4) {
                 toggle(".*", isOn: $model.searchOptions.isRegex, help: "Regular expression")
