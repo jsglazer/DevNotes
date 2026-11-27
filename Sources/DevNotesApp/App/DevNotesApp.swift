@@ -1,4 +1,5 @@
 import DevNotesCore
+import DevStyleKit
 import SwiftUI
 
 /// App entry point. It wires the composition root: a file-backed `NoteRepository` (source of
@@ -24,9 +25,13 @@ struct DevNotesApp: App {
             },
             conflictResolver: { [store] id in await store.resolveFileVersionConflict(for: id) }
         )
+        // DevStyle: the App Group folder on macOS (sandboxed, so the entitlement is required); on
+        // iOS there is no shared folder (an iOS App Group id must start with `group.`), so the
+        // store falls back to DevStyle's built-in profiles and this app's own choice.
         _model = State(initialValue: AppModel(
             repository: store,
             sync: sync,
+            style: DevStyleStore(),
             watchDirectory: store.directory,
             watchUbiquity: store.isUbiquitous
         ))
@@ -35,6 +40,8 @@ struct DevNotesApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(model: model)
+                .devStyle(model.style)
+                .environment(model.style)
         }
         #if os(macOS)
         .commands {
@@ -45,6 +52,8 @@ struct DevNotesApp: App {
         #if os(macOS)
         Settings {
             SettingsView(model: model)
+                .devStyle(model.style)
+                .environment(model.style)
         }
         #endif
     }

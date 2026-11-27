@@ -1,4 +1,5 @@
 import DevNotesCore
+import DevStyleKit
 import Foundation
 import Observation
 import SwiftUI
@@ -46,6 +47,8 @@ enum PreferenceKey {
     static let similarHighlightColor = "devnotes.similarHighlightColor"
     static let similarColorLight = "devnotes.similarColorLight"
     static let similarColorDark = "devnotes.similarColorDark"
+    /// Set once the 1.0.32 → DevStyle colour migration has run on this device.
+    static let devStyleMigrated = "devnotes.devStyleMigrated"
     static let openLinksOnLongPress = "devnotes.openLinksOnLongPress"
     static let caretPositions = "devnotes.caretPositions"
 
@@ -137,11 +140,12 @@ public final class AppModel {
     /// so the last zoom survives relaunch.
     public var zoom: Double = Zoom.normal { didSet { writePreference(zoom, forKey: PreferenceKey.zoom) } }
 
-    /// Whether the editor paints a background band behind the caret's line. The band colour is
-    /// theme-specific (`currentLineColorLight` / `currentLineColorDark`), each a `#rrggbb(aa)` hex.
+    /// Whether the editor paints a background band behind the caret's line. The band colour comes
+    /// from the DevStyle profile (`active-line`) unless the user picked one per theme
+    /// (`currentLineColorLight` / `currentLineColorDark`, `#rrggbb(aa)` hex; empty = the profile's).
     public var highlightCurrentLine = false { didSet { writePreference(highlightCurrentLine, forKey: PreferenceKey.highlightCurrentLine) } }
-    public var currentLineColorLight = "#FFF6C2" { didSet { writePreference(currentLineColorLight, forKey: PreferenceKey.currentLineLight) } }
-    public var currentLineColorDark = "#3A3B22" { didSet { writePreference(currentLineColorDark, forKey: PreferenceKey.currentLineDark) } }
+    public var currentLineColorLight = "" { didSet { writePreference(currentLineColorLight, forKey: PreferenceKey.currentLineLight) } }
+    public var currentLineColorDark = "" { didSet { writePreference(currentLineColorDark, forKey: PreferenceKey.currentLineDark) } }
 
     /// Whether the "Highlight Similar" toolbar button is active. While true, every occurrence of
     /// the currently selected text is highlighted across the open note. Session-only (like Find's
@@ -151,11 +155,11 @@ public final class AppModel {
     /// (rather than local `@State` on `SidebarView`) because it's toggled from `EditorToolbar`, which
     /// sits in a different branch of the view tree.
     public var isOutlineVisible = false
-    /// Background colours painted over occurrences the "Highlight Similar" button finds — one per
-    /// theme (a colour bright enough for light mode washed the text out in dark mode). Persisted as
-    /// `#rrggbb` hex, same as the current-line colours.
-    public var similarColorLight = "#FFE08A" { didSet { writePreference(similarColorLight, forKey: PreferenceKey.similarColorLight) } }
-    public var similarColorDark = "#6E5A1E" { didSet { writePreference(similarColorDark, forKey: PreferenceKey.similarColorDark) } }
+    /// Background colours painted over occurrences the "Highlight Similar" button finds. They come
+    /// from the DevStyle profile (`selection-match`) unless the user picked one per theme. Persisted
+    /// as `#rrggbb` hex, same as the current-line colours; empty = the profile's.
+    public var similarColorLight = "" { didSet { writePreference(similarColorLight, forKey: PreferenceKey.similarColorLight) } }
+    public var similarColorDark = "" { didSet { writePreference(similarColorDark, forKey: PreferenceKey.similarColorDark) } }
 
     /// When true (default), a long press on a URL in the note opens it in the browser (iOS — the
     /// text view is editable, so links aren't tappable any other way).
@@ -219,13 +223,20 @@ public final class AppModel {
 
     private var saveTask: Task<Void, Never>?
 
+    /// DevStyle (https://github.com/jsglazer/devstyle): the shared style profiles every app reads.
+    /// One store per app; it watches the shared folder (macOS) and holds this app's "follow shared
+    /// style / use my own" choice. Views read the current theme via `@Environment(\.dsTheme)`.
+    @ObservationIgnored public let style: DevStyleStore
+
     public init(
         repository: NoteRepository,
         sync: SyncService,
+        style: DevStyleStore,
         defaults: UserDefaults = .standard,
         watchDirectory: URL? = nil,
         watchUbiquity: Bool = false
     ) {
+        self.style = style
         self.repository = repository
         self.sync = sync
         self.defaults = defaults
@@ -337,17 +348,22 @@ public final class AppModel {
         if preferences.highlightCurrentLine != highlightCurrentLine {
             highlightCurrentLine = preferences.highlightCurrentLine
         }
-        if preferences.currentLineLight.isEmpty == false, preferences.currentLineLight != currentLineColorLight {
-            currentLineColorLight = preferences.currentLineLight
+        // A device still on 1.0.32 sends its old default colours: those mean "the profile's".
+        let currentLineLight = LegacyStyleMigration.migratedOverride(preferences.currentLineLight, for: .currentLineLight)
+        if currentLineLight.isEmpty == false, currentLineLight != currentLineColorLight {
+            currentLineColorLight = currentLineLight
         }
-        if preferences.currentLineDark.isEmpty == false, preferences.currentLineDark != currentLineColorDark {
-            currentLineColorDark = preferences.currentLineDark
+        let currentLineDark = LegacyStyleMigration.migratedOverride(preferences.currentLineDark, for: .currentLineDark)
+        if currentLineDark.isEmpty == false, currentLineDark != currentLineColorDark {
+            currentLineColorDark = currentLineDark
         }
-        if preferences.similarLight.isEmpty == false, preferences.similarLight != similarColorLight {
-            similarColorLight = preferences.similarLight
+        let similarLight = LegacyStyleMigration.migratedOverride(preferences.similarLight, for: .similarLight)
+        if similarLight.isEmpty == false, similarLight != similarColorLight {
+            similarColorLight = similarLight
         }
-        if preferences.similarDark.isEmpty == false, preferences.similarDark != similarColorDark {
-            similarColorDark = preferences.similarDark
+        let similarDark = LegacyStyleMigration.migratedOverride(preferences.similarDark, for: .similarDark)
+        if similarDark.isEmpty == false, similarDark != similarColorDark {
+            similarColorDark = similarDark
         }
         if styleDidChange { editor.style = styleSheet }
     }
@@ -399,6 +415,7 @@ public final class AppModel {
         if defaults.object(forKey: PreferenceKey.openLinksOnLongPress) != nil {
             openLinksOnLongPress = defaults.bool(forKey: PreferenceKey.openLinksOnLongPress)
         }
+        migrateLegacyStyle()
         caretPositions = (defaults.dictionary(forKey: PreferenceKey.caretPositions) as? [String: Int]) ?? [:]
         localRevision = defaults.double(forKey: PreferenceKey.prefsRevision)
         adoptedRevision = defaults.double(forKey: PreferenceKey.adoptedRevision)
@@ -861,14 +878,32 @@ public final class AppModel {
     /// Rounds to two decimals so a run of ⌘+/⌘- keeps clean 0.1 steps (no float drift like 1.2000001).
     private func rounded2(_ value: Double) -> Double { (value * 100).rounded() / 100 }
 
+    // MARK: - DevStyle migration (from 1.0.32)
+
+    /// One-time move to DevStyle colours: the colour pickers still at DevNotes 1.0.32's defaults,
+    /// and a custom style box that only restates the old Menlo 14 defaults, are cleared so the
+    /// DevStyle profile shows. Anything the user actually chose is kept as an override. Runs while
+    /// preferences load (`isAdoptingPreferences`), so the change is stored locally but not mirrored.
+    private func migrateLegacyStyle() {
+        guard defaults.bool(forKey: PreferenceKey.devStyleMigrated) == false else { return }
+        currentLineColorLight = LegacyStyleMigration.migratedOverride(currentLineColorLight, for: .currentLineLight)
+        currentLineColorDark = LegacyStyleMigration.migratedOverride(currentLineColorDark, for: .currentLineDark)
+        similarColorLight = LegacyStyleMigration.migratedOverride(similarColorLight, for: .similarLight)
+        similarColorDark = LegacyStyleMigration.migratedOverride(similarColorDark, for: .similarDark)
+        if styleInput.isEmpty == false, LegacyStyleMigration.isOnlyOldDefaults(styleInput: styleInput) {
+            styleInput = ""
+        }
+        defaults.set(true, forKey: PreferenceKey.devStyleMigrated)
+    }
+
     // MARK: - Current-line highlight
 
-    /// The current-line band colour resolved for `scheme`, or nil when the highlight is off or the
-    /// stored hex can't be parsed. Passed to the editor surface, which paints the band natively.
-    public func currentLineColor(for scheme: ColorScheme) -> PlatformColor? {
+    /// The current-line band colour for `scheme`: the user's override when set, else the DevStyle
+    /// profile's `active-line`. Nil when the highlight is off. The editor paints the band natively.
+    func currentLineColor(for scheme: ColorScheme, palette: EditorPalette) -> PlatformColor? {
         guard highlightCurrentLine else { return nil }
         let hex = scheme == .dark ? currentLineColorDark : currentLineColorLight
-        return PlatformColor(hex: hex)
+        return PlatformColor(hex: hex) ?? palette[.currentLine]
     }
 
     // MARK: - Highlight Similar
@@ -889,11 +924,11 @@ public final class AppModel {
         return SearchEngine.matchRanges(editor.text, query: selected, options: SearchOptions(caseSensitive: false))
     }
 
-    /// The "Highlight Similar" background colour for the active theme, or nil when the highlight
-    /// is off.
-    public func similarHighlightColor(for scheme: ColorScheme) -> PlatformColor? {
+    /// The "Highlight Similar" background colour for the active theme: the user's override when
+    /// set, else the DevStyle profile's `selection-match`. Nil when the highlight is off.
+    func similarHighlightColor(for scheme: ColorScheme, palette: EditorPalette) -> PlatformColor? {
         guard highlightSimilarActive else { return nil }
-        return PlatformColor(hex: scheme == .dark ? similarColorDark : similarColorLight)
+        return PlatformColor(hex: scheme == .dark ? similarColorDark : similarColorLight) ?? palette[.similarMatch]
     }
 
     // MARK: - Sidebar

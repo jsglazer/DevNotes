@@ -1,9 +1,13 @@
 import DevNotesCore
+import DevStyleKit
 import SwiftUI
 
 /// Outline actions for the editor. Every button routes through the pure `OutlineEngine` via
 /// `EditorViewModel`; the toolbar itself contains no text-manipulation logic.
 struct EditorToolbar: View {
+    /// The DevStyle profile for the current light/dark appearance.
+    @Environment(\.dsTheme) private var dsTheme
+
     var editor: EditorViewModel
     /// Icon point size. iOS passes a larger value (~20% up) so the pinned tools are comfortably
     /// tappable; macOS uses the system default.
@@ -105,7 +109,7 @@ struct EditorToolbar: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(iconSize.map { .system(size: $0) })
-                .foregroundStyle(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.primary))
+                .foregroundStyle(isOn ? AnyShapeStyle(dsTheme.surface(.accent)) : AnyShapeStyle(dsTheme.surface(.text)))
         }
         .buttonStyle(.borderless)
         .help(title)

@@ -9,50 +9,39 @@ import UIKit
 
 /// Live Markdown **syntax coloring** for the editor. This colors the raw Markdown in place — the
 /// `#`, `-`, `**`, `` ` `` markers stay visible and take on a font color — rather than hiding
-/// markup or rendering HTML. Colors are a small fixed palette layered on top of the
-/// `StyleApplier` body attributes, so the user's custom stylesheet still governs the base font,
-/// size, and default text color; this pass only overrides `foregroundColor` (and font traits) on
-/// the spans it recognises.
+/// markup or rendering HTML. Colours come from the active DevStyle profile (`EditorPalette`:
+/// per-level heading colours, list markers, emphasis, code, quotes, links), layered on top of the
+/// `StyleApplier` body attributes, so the profile and the user's custom stylesheet govern the base
+/// font, size, and default text colour; this pass only overrides `foregroundColor` (and font
+/// traits) on the spans it recognises.
 ///
 /// It runs over the whole (small) note on each edit. There is no WebView and no CSS execution: the
 /// input is plain text scanned with `NSRegularExpression`, and only known token ranges are colored.
 struct MarkdownHighlighter {
     var style: StyleSheet
-    var baseFontSize: CGFloat = 14
-    var baseFontName: String = "Menlo"
+    /// The active DevStyle theme's colours and body font.
+    var palette: EditorPalette = .builtin(dark: false)
     /// Text-zoom multiplier (⌘+/⌘-), forwarded to the `StyleApplier` so the syntax pass sizes fonts
     /// to match the zoomed body text.
     var zoom: CGFloat = 1
 
     private var applier: StyleApplier {
-        StyleApplier(baseFontSize: baseFontSize, baseFontName: baseFontName, zoom: zoom)
+        StyleApplier(palette: palette, zoom: zoom)
     }
 
     // MARK: - Palette
-    // Chosen to stay legible in both the light and dark themes. Heading lines are colored per
-    // level — markers and text alike: # red, ## orange, ### yellow, #### (and deeper) green.
-    private static let fallbackColor = PlatformColor.gray
-    private static let headingLevelColors: [PlatformColor] = [
-        PlatformColor(hex: "#D8564F") ?? fallbackColor,
-        PlatformColor(hex: "#E07D2C") ?? fallbackColor,
-        PlatformColor(hex: "#DAB22E") ?? fallbackColor,
-        PlatformColor(hex: "#89AC40") ?? fallbackColor
-    ]
-    private static let listMarker = PlatformColor(hex: "#2563eb") ?? fallbackColor
-    private static let emphasisMarker = PlatformColor(hex: "#7c3aed") ?? fallbackColor
-    private static let codeColor = PlatformColor(hex: "#0f766e") ?? fallbackColor
-    private static let quoteColor = PlatformColor(hex: "#6b7280") ?? fallbackColor
-    private static let linkColor = PlatformColor(hex: "#2563eb") ?? fallbackColor
+    // From the DevStyle profile. Heading lines are coloured per level, markers and text alike
+    // (`syn-heading-1` … `syn-heading-6`; Default keeps DevNotes' red, orange, yellow, green…),
+    // unless the custom style box sets `heading-color`.
 
-    /// Heading color for a `#` run of `level` characters; levels past the palette reuse its last color.
-    private static func headingColor(level: Int) -> PlatformColor {
-        headingLevelColors[min(max(level, 1), headingLevelColors.count) - 1]
+    /// Heading colour for a `#` run of `level` characters.
+    private func headingColor(level: Int) -> PlatformColor {
+        applier.colorToken(style[.headingColor]) ?? palette.heading(level: level)
     }
 
-    /// List-marker colour: the user's `bullet-color` token when set, else the fixed palette blue.
+    /// List-marker colour: the user's `bullet-color` token when set, else the profile's.
     private var bulletColor: PlatformColor {
-        if case let .color(hex)? = style[.bulletColor], let color = PlatformColor(hex: hex) { return color }
-        return Self.listMarker
+        applier.colorToken(style[.bulletColor]) ?? palette[.listMarker]
     }
 
     /// Extra vertical space painted before heading lines (`section-spacing` token), scaled with the
@@ -105,7 +94,7 @@ struct MarkdownHighlighter {
         storage.setAttributes(body, range: full)
 
         let baseFont = (body[.font] as? PlatformFont)
-            ?? PlatformFont.monospacedSystemFont(ofSize: baseFontSize, weight: .regular)
+            ?? PlatformFont.monospacedSystemFont(ofSize: applier.baseSize(from: style) * zoom, weight: .regular)
         // The body paragraph style (line/paragraph spacing) is the base each list line's hanging
         // indent is layered onto, so wrapped bullet/number lines tuck under their text.
         let baseParagraph = (body[.paragraphStyle] as? NSParagraphStyle) ?? NSParagraphStyle()
@@ -115,10 +104,9 @@ struct MarkdownHighlighter {
         // and the heading text gets its heading font.
         applyRegex(Self.headingPattern, in: ns, range: full, storage: storage) { match in
             let markers = match.range(at: 1)
-            let color = Self.headingColor(level: markers.length)
+            let color = headingColor(level: markers.length)
             storage.addAttributes([.foregroundColor: color], range: markers)
-            let level = min(3, max(1, markers.length))
-            let headingAttrs = applier.headingAttributes(level: level, from: style)
+            let headingAttrs = applier.headingAttributes(level: markers.length, from: style)
             if let headingFont = headingAttrs[.font] as? PlatformFont {
                 storage.addAttribute(.font, value: headingFont, range: markers)
                 let text = match.range(at: 2)
@@ -148,35 +136,35 @@ struct MarkdownHighlighter {
         }
         // Blockquote marker.
         applyRegex(Self.quotePattern, in: ns, range: full, storage: storage) { match in
-            storage.addAttribute(.foregroundColor, value: Self.quoteColor, range: match.range(at: 1))
+            storage.addAttribute(.foregroundColor, value: palette[.quote], range: match.range(at: 1))
         }
         // Thematic break (`---`, `***`, `___`) — dim the whole line so the real rule drawn over it
         // (macOS) reads cleanly, and iOS still gets a distinct divider colour.
         applyRegex(Self.thematicBreakPattern, in: ns, range: full, storage: storage) { match in
-            storage.addAttribute(.foregroundColor, value: Self.quoteColor, range: match.range)
+            storage.addAttribute(.foregroundColor, value: palette[.rule], range: match.range)
         }
 
         // --- Inline spans ---
         // Inline code `like this` — teal + monospaced.
         applyRegex(Self.codePattern, in: ns, range: full, storage: storage) { match in
             storage.addAttributes([
-                .foregroundColor: Self.codeColor,
+                .foregroundColor: palette[.code],
                 .font: Self.monospaced(baseFont)
             ], range: match.range)
         }
         // Bold **text** or __text__ — bold trait, dim markers.
         applyRegex(Self.boldPattern, in: ns, range: full, storage: storage) { match in
             storage.addAttribute(.font, value: Self.bold(baseFont), range: match.range(at: 2))
-            colorMarkers(around: match, group: 2, color: Self.emphasisMarker, in: storage)
+            colorMarkers(around: match, group: 2, color: palette[.emphasisMarker], in: storage)
         }
         // Italic *text* or _text_ — italic trait. Lookarounds avoid matching inside ** ** runs.
         applyRegex(Self.italicPattern, in: ns, range: full, storage: storage) { match in
             storage.addAttribute(.font, value: Self.italic(baseFont), range: match.range(at: 2))
-            colorMarkers(around: match, group: 2, color: Self.emphasisMarker, in: storage)
+            colorMarkers(around: match, group: 2, color: palette[.emphasisMarker], in: storage)
         }
         // Links [text](url) — color the visible text.
         applyRegex(Self.linkPattern, in: ns, range: full, storage: storage) { match in
-            storage.addAttribute(.foregroundColor, value: Self.linkColor, range: match.range(at: 1))
+            storage.addAttribute(.foregroundColor, value: palette[.link], range: match.range(at: 1))
         }
     }
 

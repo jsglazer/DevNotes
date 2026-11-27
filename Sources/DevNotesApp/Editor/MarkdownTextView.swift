@@ -10,6 +10,9 @@ struct MarkdownTextView: View {
     @Binding var text: String
     @Binding var selection: DevNotesCore.TextSelection
     var style: StyleSheet
+    /// The active DevStyle theme's editor colours and body font (resolved for light/dark by the
+    /// caller). The custom style box (`style`) still wins for every token it sets.
+    var palette: EditorPalette = .builtin(dark: false)
     var wrapText: Bool = true
     var showLineNumbers: Bool = false
     var spellCheck: Bool = true
@@ -53,6 +56,7 @@ struct MarkdownTextView: View {
             text: $text,
             selection: $selection,
             style: style,
+            palette: palette,
             wrapText: wrapText,
             showLineNumbers: showLineNumbers,
             spellCheck: spellCheck,
@@ -80,6 +84,7 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
     @Binding var text: String
     @Binding var selection: DevNotesCore.TextSelection
     var style: StyleSheet
+    var palette: EditorPalette
     var wrapText: Bool
     var showLineNumbers: Bool
     var spellCheck: Bool
@@ -186,6 +191,20 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
         if context.coordinator.zoomChanged(zoom) {
             context.coordinator.invalidateHighlight()
         }
+        // A new DevStyle profile (or a light/dark switch) re-colours the note and the editor chrome
+        // in place: the text, selection, caret, scroll position and undo stack are untouched.
+        if context.coordinator.paletteChanged(palette) {
+            context.coordinator.invalidateHighlight()
+            textView.insertionPointColor = palette[.cursor]
+            textView.selectedTextAttributes = [.backgroundColor: palette[.selection]]
+            textView.ruleColor = palette[.rule]
+            context.coordinator.gutter?.palette = palette
+            textView.needsDisplay = true
+        }
+        let background = StyleApplier(palette: palette, zoom: CGFloat(zoom)).editorBackground(from: style)
+        if scrollView.backgroundColor != background {
+            scrollView.backgroundColor = background
+        }
 
         let bottomInset = CGFloat(max(0, bottomPadding))
         if scrollView.contentInsets.bottom != bottomInset {
@@ -247,7 +266,7 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             textView.isContinuousSpellCheckingEnabled = spellCheck
         }
 
-        textView.typingAttributes = StyleApplier(zoom: CGFloat(zoom)).bodyAttributes(from: style)
+        textView.typingAttributes = StyleApplier(palette: palette, zoom: CGFloat(zoom)).bodyAttributes(from: style)
         // Re-highlight only when the text or style actually changed. The delegate callbacks
         // already highlight after each edit, and this update pass runs right behind them — without
         // this guard every keystroke paid for the full syntax pass twice.
@@ -256,7 +275,7 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             // Re-colouring re-lays the TextKit 2 viewport, which can shake the scroll position;
             // pin it so a background re-highlight never makes the screen jump under the reader.
             context.coordinator.preservingScroll(of: scrollView) {
-                MarkdownHighlighter(style: style, zoom: CGFloat(zoom)).apply(to: storage)
+                MarkdownHighlighter(style: style, palette: palette, zoom: CGFloat(zoom)).apply(to: storage)
             }
             context.coordinator.didHighlight(text: textView.string, style: style)
         }
@@ -392,6 +411,15 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             return lastZoom != value
         }
 
+        /// Last DevStyle palette applied, so a profile or light/dark change re-colours the note once.
+        private var lastPalette: EditorPalette?
+
+        /// True when the palette changed since the last update (records the new value).
+        func paletteChanged(_ value: EditorPalette) -> Bool {
+            defer { lastPalette = value }
+            return lastPalette != value
+        }
+
         /// True when the wrap mode + width already match the last-applied configuration (and records
         /// the requested values so the first call for a given mode/width always applies).
         func wrappingUnchanged(wrapText: Bool, width: CGFloat) -> Bool {
@@ -503,8 +531,8 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
             guard searchMatches.isEmpty == false || similarMatches.isEmpty == false || hasHighlight else { return }
             let full = NSRange(location: 0, length: storage.length)
             storage.removeAttribute(.backgroundColor, range: full)
-            let all = NSColor.systemYellow.withAlphaComponent(0.35)
-            let focused = NSColor.systemOrange.withAlphaComponent(0.6)
+            let all = parent.palette[.searchMatch]
+            let focused = parent.palette[.searchCurrent]
             for match in searchMatches {
                 let range = NSRange(location: match.location, length: match.length)
                 guard NSMaxRange(range) <= storage.length else { continue }
@@ -622,10 +650,10 @@ private struct MarkdownTextViewRepresentable: NSViewRepresentable {
                 // on-screen.
                 if let scrollView = textView.enclosingScrollView {
                     preservingScroll(of: scrollView) {
-                        MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: storage, editedRange: editedRange)
+                        MarkdownHighlighter(style: parent.style, palette: parent.palette, zoom: CGFloat(parent.zoom)).apply(to: storage, editedRange: editedRange)
                     }
                 } else {
-                    MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: storage, editedRange: editedRange)
+                    MarkdownHighlighter(style: parent.style, palette: parent.palette, zoom: CGFloat(parent.zoom)).apply(to: storage, editedRange: editedRange)
                 }
                 didHighlight(text: textView.string, style: parent.style)
             }
@@ -658,6 +686,7 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
     @Binding var text: String
     @Binding var selection: DevNotesCore.TextSelection
     var style: StyleSheet
+    var palette: EditorPalette
     var wrapText: Bool
     var showLineNumbers: Bool
     var spellCheck: Bool
@@ -783,11 +812,21 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
         if context.coordinator.zoomChanged(zoom) {
             context.coordinator.invalidateHighlight()
         }
-        textView.typingAttributes = StyleApplier(zoom: CGFloat(zoom)).bodyAttributes(from: style)
+        // A new DevStyle profile (or a light/dark switch) re-colours the note and the editor chrome
+        // in place: the text, selection, caret, scroll position and undo stack are untouched.
+        if context.coordinator.paletteChanged(palette) {
+            context.coordinator.invalidateHighlight()
+            container.palette = palette
+        }
+        let background = StyleApplier(palette: palette, zoom: CGFloat(zoom)).editorBackground(from: style)
+        if container.backgroundColor != background {
+            container.backgroundColor = background
+        }
+        textView.typingAttributes = StyleApplier(palette: palette, zoom: CGFloat(zoom)).bodyAttributes(from: style)
         // Skip the syntax pass when the delegate callbacks already highlighted this exact
         // text/style — otherwise every keystroke runs the highlighter twice.
         if context.coordinator.needsHighlight(text: textView.text, style: style) {
-            MarkdownHighlighter(style: style, zoom: CGFloat(zoom)).apply(to: textView.textStorage)
+            MarkdownHighlighter(style: style, palette: palette, zoom: CGFloat(zoom)).apply(to: textView.textStorage)
             context.coordinator.didHighlight(text: textView.text, style: style)
         }
         context.coordinator.applySimilarHighlight(matches: similarMatches, color: similarHighlightColor)
@@ -942,6 +981,15 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
             return lastZoom != value
         }
 
+        /// Last DevStyle palette applied, so a profile or light/dark change re-colours the note once.
+        private var lastPalette: EditorPalette?
+
+        /// True when the palette changed since the last update (records the new value).
+        func paletteChanged(_ value: EditorPalette) -> Bool {
+            defer { lastPalette = value }
+            return lastPalette != value
+        }
+
         func focusRequestChanged(_ value: Int) -> Bool {
             defer { lastFocusRequest = value }
             return lastFocusRequest != value
@@ -1069,11 +1117,11 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
             guard let change = TextDiff.minimalEdit(from: textView.text, to: edit.text) else { return false }
             textView.textStorage.replaceCharacters(in: change.range, with: change.replacement)
             textView.selectedRange = NSRange(location: edit.selection.location, length: edit.selection.length)
-            textView.typingAttributes = StyleApplier(zoom: CGFloat(parent.zoom)).bodyAttributes(from: parent.style)
+            textView.typingAttributes = StyleApplier(palette: parent.palette, zoom: CGFloat(parent.zoom)).bodyAttributes(from: parent.style)
             // Storage-level edits bypass `textViewDidChange`, so do its work here, scoped to the
             // paragraphs the replacement touched.
             let recolour = NSRange(location: change.range.location, length: (change.replacement as NSString).length)
-            MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: textView.textStorage, editedRange: recolour)
+            MarkdownHighlighter(style: parent.style, palette: parent.palette, zoom: CGFloat(parent.zoom)).apply(to: textView.textStorage, editedRange: recolour)
             didHighlight(text: textView.text, style: parent.style)
             parent.text = textView.text
             parent.selection = edit.selection
@@ -1108,7 +1156,7 @@ private struct MarkdownTextViewRepresentable: UIViewRepresentable {
             let editedRange = pendingEditRange
             pendingEditRange = nil
             let offset = textView.contentOffset
-            MarkdownHighlighter(style: parent.style, zoom: CGFloat(parent.zoom)).apply(to: textView.textStorage, editedRange: editedRange)
+            MarkdownHighlighter(style: parent.style, palette: parent.palette, zoom: CGFloat(parent.zoom)).apply(to: textView.textStorage, editedRange: editedRange)
             didHighlight(text: textView.text, style: parent.style)
             if textView.contentOffset != offset {
                 textView.setContentOffset(offset, animated: false)
@@ -1153,6 +1201,17 @@ final class EditorContainerView: UIView {
             inset.left = showLineNumbers ? gutterWidth + 4 : 8
             textView.textContainerInset = inset
             gutter.setNeedsDisplay()
+        }
+    }
+
+    /// The DevStyle profile's editor colours: caret (`tintColor`), gutter and thematic-break rule.
+    var palette: EditorPalette = .builtin(dark: false) {
+        didSet {
+            guard palette != oldValue else { return }
+            textView.tintColor = palette[.cursor]
+            gutter.palette = palette
+            ruleOverlay.ruleColor = palette[.rule]
+            refreshOverlays()
         }
     }
 
@@ -1261,6 +1320,8 @@ final class IOSCurrentLineOverlay: UIView {
 /// dashes stay editable underneath (dimmed by `MarkdownHighlighter`); this just paints the rule.
 final class IOSThematicBreakOverlay: UIView {
     private weak var textView: UITextView?
+    /// The DevStyle profile's `muted` colour.
+    var ruleColor: UIColor = .secondaryLabel
 
     init(textView: UITextView) {
         self.textView = textView
@@ -1294,7 +1355,7 @@ final class IOSThematicBreakOverlay: UIView {
         // `.ensuresLayout` walk destabilised fragment frames mid-draw, which is why a freshly typed
         // `---` rule could appear and immediately vanish.
         let scale = traitCollection.displayScale > 0 ? traitCollection.displayScale : 2
-        UIColor.secondaryLabel.setStroke()
+        ruleColor.setStroke()
         layoutManager.enumerateTextLayoutFragments(from: viewport.location, options: []) { fragment in
             guard fragment.rangeInElement.location.compare(viewport.endLocation) == .orderedAscending else {
                 return false
@@ -1324,6 +1385,8 @@ final class IOSThematicBreakOverlay: UIView {
 /// fragments and counting preceding newlines, offset by the text view's scroll position.
 final class IOSLineNumberGutter: UIView {
     private weak var textView: UITextView?
+    /// The DevStyle profile's gutter colours (`gutter-bg`, `gutter-fg`, `border`).
+    var palette: EditorPalette = .builtin(dark: false)
 
     init(textView: UITextView) {
         self.textView = textView
@@ -1342,17 +1405,17 @@ final class IOSLineNumberGutter: UIView {
               let contentManager = layoutManager.textContentManager
         else { return }
 
-        UIColor.secondarySystemBackground.withAlphaComponent(0.6).setFill()
+        palette[.gutterBackground].setFill()
         UIRectFill(rect)
         let separator = UIBezierPath()
         separator.move(to: CGPoint(x: bounds.maxX - 0.5, y: rect.minY))
         separator.addLine(to: CGPoint(x: bounds.maxX - 0.5, y: rect.maxY))
-        UIColor.separator.setStroke()
+        palette[.gutterBorder].setStroke()
         separator.stroke()
 
         let attributes: [NSAttributedString.Key: Any] = [
             .font: UIFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular),
-            .foregroundColor: UIColor.secondaryLabel
+            .foregroundColor: palette[.gutterText]
         ]
 
         // Number only the fragments the viewport has ALREADY laid out — the old enumeration from

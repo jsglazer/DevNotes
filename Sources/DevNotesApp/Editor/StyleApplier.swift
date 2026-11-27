@@ -1,4 +1,5 @@
 import DevNotesCore
+import DevStyleKit
 import Foundation
 import SwiftUI
 
@@ -8,42 +9,42 @@ import AppKit
 import UIKit
 #endif
 
-/// Turns a sanitised `StyleSheet` (bounded tokens from Core) into concrete text attributes for
-/// the **native attributed-string renderer** — never CSS executed in a WebView. Because the
-/// input is already validated to a closed token set, this layer only maps known tokens; there is
-/// no path for arbitrary style input to reach the text container.
+/// Turns the editor's look into concrete text attributes for the **native attributed-string
+/// renderer** — never CSS executed in a WebView. Two inputs, both already reduced to typed values:
+/// the active DevStyle profile (`EditorPalette`: body font, size, line height, colours) and the
+/// user's custom style box (`StyleSheet`, sanitised to a closed token set), which wins for every
+/// token it sets.
 struct StyleApplier {
-    /// Resolved defaults used when a token is absent.
-    var baseFontSize: CGFloat = 14
-    var baseFontName: String = "Menlo"
+    /// The active DevStyle theme's editor colours and body font.
+    var palette: EditorPalette = .builtin(dark: false)
     /// Text-zoom multiplier (⌘+/⌘-). Multiplies every resolved font size so the whole note scales
-    /// while the user's stylesheet still governs the relative sizes.
+    /// while the profile and the user's stylesheet still govern the relative sizes.
     var zoom: CGFloat = 1
 
-    /// Fallback text color when the style sheet has no explicit `textColor` token — must be a
-    /// dynamic system color so it stays legible when the theme switches (a fixed color left
-    /// typed text black-on-black in dark mode).
-    private static var defaultTextColor: PlatformColor {
-        #if os(macOS)
-        return NSColor.textColor
-        #elseif os(iOS)
-        return UIColor.label
-        #endif
+    /// The unzoomed body size: the style box's `font-size`, else the profile's.
+    func baseSize(from sheet: StyleSheet) -> CGFloat {
+        sizeToken(sheet[.fontSize]) ?? palette.bodySize
     }
 
-    /// Body typography attributes derived from the sheet.
+    /// The editor background: the style box's `background-color`, else the profile's `editor-bg`.
+    func editorBackground(from sheet: StyleSheet) -> PlatformColor {
+        colorToken(sheet[.backgroundColor]) ?? palette[.editorBackground]
+    }
+
+    /// Body typography attributes: the profile's, with the style box's tokens on top.
     func bodyAttributes(from sheet: StyleSheet) -> [NSAttributedString.Key: Any] {
         var attributes: [NSAttributedString.Key: Any] = [:]
 
-        let size = (sizeToken(sheet[.fontSize]) ?? baseFontSize) * zoom
-        let family = familyToken(sheet[.fontFamily]) ?? baseFontName
-        attributes[.font] = makeFont(name: family, size: size, weight: sheet[.fontWeight])
-
-        attributes[.foregroundColor] = colorToken(sheet[.textColor]) ?? Self.defaultTextColor
+        let size = baseSize(from: sheet) * zoom
+        attributes[.font] = makeFont(family: familyToken(sheet[.fontFamily]), size: size, weight: sheet[.fontWeight])
+        attributes[.foregroundColor] = colorToken(sheet[.textColor]) ?? palette[.editorText]
 
         let paragraph = NSMutableParagraphStyle()
         if let lineSpacing = sizeToken(sheet[.lineSpacing]) {
             paragraph.lineSpacing = lineSpacing
+        } else {
+            // the profile's line height (DevStyle mono-line-height) unless the style box sets spacing
+            paragraph.lineHeightMultiple = palette.lineHeightMultiple
         }
         if let paragraphSpacing = sizeToken(sheet[.paragraphSpacing]) {
             paragraph.paragraphSpacing = paragraphSpacing
@@ -52,15 +53,17 @@ struct StyleApplier {
         return attributes
     }
 
-    /// Heading attributes for level 1–3, scaled from the sheet's heading sizes.
+    /// Heading attributes for level 1–6: DevNotes' heading sizes (or the style box's), the editor
+    /// font in bold, and the level's colour — the style box's `heading-color` when set, else the
+    /// profile's per-level colour (`syn-heading-1` … `syn-heading-6`).
     func headingAttributes(level: Int, from sheet: StyleSheet) -> [NSAttributedString.Key: Any] {
         var attributes = bodyAttributes(from: sheet)
-        let key: StyleTokenKey = level <= 1 ? .heading1Size : (level == 2 ? .heading2Size : .heading3Size)
-        let size = (sizeToken(sheet[key]) ?? (baseFontSize * (level <= 1 ? 1.8 : level == 2 ? 1.5 : 1.25))) * zoom
-        attributes[.font] = makeFont(name: familyToken(sheet[.fontFamily]) ?? baseFontName, size: size, weight: .fontWeight(.named("bold")))
-        if let color = colorToken(sheet[.headingColor]) {
-            attributes[.foregroundColor] = color
-        }
+        let sizeLevel = min(3, max(1, level))
+        let key: StyleTokenKey = sizeLevel == 1 ? .heading1Size : (sizeLevel == 2 ? .heading2Size : .heading3Size)
+        let base = baseSize(from: sheet)
+        let size = (sizeToken(sheet[key]) ?? (base * (sizeLevel == 1 ? 1.8 : sizeLevel == 2 ? 1.5 : 1.25))) * zoom
+        attributes[.font] = makeFont(family: familyToken(sheet[.fontFamily]), size: size, weight: .fontWeight(.named("bold")))
+        attributes[.foregroundColor] = colorToken(sheet[.headingColor]) ?? palette.heading(level: level)
         return attributes
     }
 
@@ -76,13 +79,15 @@ struct StyleApplier {
         return nil
     }
 
-    private func colorToken(_ value: StyleValue?) -> PlatformColor? {
+    func colorToken(_ value: StyleValue?) -> PlatformColor? {
         if case let .color(hex) = value { return PlatformColor(hex: hex) }
         return nil
     }
 
-    private func makeFont(name: String, size: CGFloat, weight: StyleValue?) -> PlatformFont {
-        let base = PlatformFont(name: name, size: size) ?? PlatformFont.monospacedSystemFont(ofSize: size, weight: .regular)
+    /// The style box's family list when set, else the profile's; installed fonts only, falling back
+    /// to the system monospaced font.
+    private func makeFont(family: String?, size: CGFloat, weight: StyleValue?) -> PlatformFont {
+        let base = family.map { DSFontResolver.font(families: fontFamilies($0), size: size) } ?? palette.bodyFont(size: size)
         guard case let .fontWeight(token) = weight else { return base }
         let isBold: Bool
         switch token {

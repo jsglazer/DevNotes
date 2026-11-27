@@ -15,6 +15,9 @@ final class EditorTextView: NSTextView {
     /// off. Set by the representable; already resolved for the active theme.
     var currentLineHighlight: NSColor?
 
+    /// Colour of the line drawn over thematic breaks (`---`): the DevStyle profile's `muted`.
+    var ruleColor: NSColor = .secondaryLabelColor
+
     override func keyDown(with event: NSEvent) {
         if let chord = DevNotesCore.KeyChord(macEvent: event), onKeyChord?(chord) == true {
             return
@@ -86,7 +89,7 @@ final class EditorTextView: NSTextView {
         // Enumeration is viewport-scoped and never forces layout: the old whole-document
         // `.ensuresLayout` walk on every redraw destabilised fragment frames mid-draw, which is why
         // a freshly typed `---` rule could appear and immediately vanish.
-        NSColor.secondaryLabelColor.setStroke()
+        ruleColor.setStroke()
         layoutManager.enumerateTextLayoutFragments(from: viewport.location, options: []) { fragment in
             guard fragment.rangeInElement.location.compare(viewport.endLocation) == .orderedAscending else {
                 return false

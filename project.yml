@@ -14,7 +14,7 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "1.0.32"
+    MARKETING_VERSION: "1.0.33"
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: "PWGXN26URQ"
     SWIFT_VERSION: "6.0"
@@ -22,6 +22,9 @@ settings:
 packages:
   DevNotesCore:
     path: .
+  DevStyleKit:
+    url: https://github.com/jsglazer/devstyle
+    exactVersion: 1.0.3
 
 targets:
   DevNotes:
@@ -33,6 +36,8 @@ targets:
     dependencies:
       - package: DevNotesCore
         product: DevNotesCore
+      - package: DevStyleKit
+        product: DevStyleKit
     settings:
       base:
         PRODUCT_NAME: DevNotes
@@ -58,6 +63,8 @@ targets:
     dependencies:
       - package: DevNotesCore
         product: DevNotesCore
+      - package: DevStyleKit
+        product: DevStyleKit
     settings:
       base:
         PRODUCT_NAME: DevNotes

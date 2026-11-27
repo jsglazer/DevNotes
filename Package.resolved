@@ -1,0 +1,15 @@
+{
+  "originHash" : "e3ea79ceb573e5e85a91cfabea3b5f70237e3876fe67da0bfb94ca3506e70c19",
+  "pins" : [
+    {
+      "identity" : "devstyle",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/jsglazer/devstyle",
+      "state" : {
+        "revision" : "0f2d826b628103c311aab24eb64f283a0d24a91b",
+        "version" : "1.0.3"
+      }
+    }
+  ],
+  "version" : 3
+}

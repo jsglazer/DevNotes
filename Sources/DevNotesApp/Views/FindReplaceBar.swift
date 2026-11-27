@@ -1,5 +1,6 @@
 #if os(macOS)
 import DevNotesCore
+import DevStyleKit
 import SwiftUI
 
 /// The Sublime-style Find/Replace bar shown over the editor (⌘F / ⌘⌥F). Find row: query field,
@@ -8,6 +9,9 @@ import SwiftUI
 /// runs through pure `SearchEngine` on `AppModel`; this view only edits `model.find` state and
 /// invokes those actions.
 struct FindReplaceBar: View {
+    /// The DevStyle profile for the current light/dark appearance.
+    @Environment(\.dsTheme) private var dsTheme
+
     @Bindable var model: AppModel
     @FocusState private var focus: Field?
 
@@ -22,7 +26,7 @@ struct FindReplaceBar: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(.bar)
+        .background(dsTheme.surface(.panel))
         .onAppear { focus = .find }
         .onExitCommand { model.closeFind() }
     }
@@ -51,7 +55,7 @@ struct FindReplaceBar: View {
 
             Text(model.find.statusText)
                 .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(dsTheme.surface(.muted))
                 .frame(minWidth: 56, alignment: .trailing)
 
             Button { model.findPrevious() } label: { Image(systemName: "chevron.up") }
@@ -96,7 +100,7 @@ struct FindReplaceBar: View {
                 .font(.caption.monospaced())
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
-                .background(isOn.wrappedValue ? Color.accentColor.opacity(0.3) : Color.gray.opacity(0.15))
+                .background(isOn.wrappedValue ? dsTheme.surface(.accent).opacity(0.3) : dsTheme.surface(.border).opacity(0.4))
                 .clipShape(RoundedRectangle(cornerRadius: 4))
         }
         .buttonStyle(.plain)

@@ -1,10 +1,14 @@
 import DevNotesCore
+import DevStyleKit
 import SwiftUI
 
 /// The visual conflict merge UI. macOS gets a side-by-side comparison; iOS gets an inline
 /// highlighted stream — both rendered from the same `DiffMergeEngine`. Choosing a side records
 /// the merged body through `AppModel`, so the captured versions are surfaced, never discarded.
 struct MergeView: View {
+    /// The DevStyle profile for the current light/dark appearance.
+    @Environment(\.dsTheme) private var dsTheme
+
     let conflict: ConflictRecord
     /// The full on-disk path of the conflicted note, or its raw ID when no path is known (an
     /// in-memory repository in tests/previews).
@@ -33,11 +37,11 @@ struct MergeView: View {
                 .font(.headline)
             Text(filePath)
                 .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(dsTheme.surface(.muted))
                 .textSelection(.enabled)
             Text("Mine: \(conflict.mine.deviceName) · Theirs: \(conflict.theirs.deviceName)")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(dsTheme.surface(.muted))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
@@ -95,9 +99,9 @@ struct MergeView: View {
     private func background(kind: SideBySideRow.Kind, side: Side) -> Color {
         switch kind {
         case .unchanged: return .clear
-        case .changed: return .yellow.opacity(0.15)
-        case .removedLeft: return side == .left ? .red.opacity(0.15) : .clear
-        case .addedRight: return side == .right ? .green.opacity(0.15) : .clear
+        case .changed: return dsTheme.surface(.warning).opacity(0.15)
+        case .removedLeft: return side == .left ? dsTheme.surface(.error).opacity(0.15) : .clear
+        case .addedRight: return side == .right ? dsTheme.surface(.success).opacity(0.15) : .clear
         }
     }
     #endif
@@ -129,8 +133,8 @@ struct MergeView: View {
     private func inlineBackground(_ kind: InlineLine.Kind) -> Color {
         switch kind {
         case .unchanged: return .clear
-        case .removed: return .red.opacity(0.15)
-        case .added: return .green.opacity(0.15)
+        case .removed: return dsTheme.surface(.error).opacity(0.15)
+        case .added: return dsTheme.surface(.success).opacity(0.15)
         }
     }
 

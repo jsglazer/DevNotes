@@ -1,9 +1,13 @@
 import DevNotesCore
+import DevStyleKit
 import SwiftUI
 
 /// Collapsible hierarchical heading outline of the currently open note, shown below the file list
 /// when toggled from the sidebar toolbar. Clicking a heading moves the caret to that line.
 struct OutlinePanelView: View {
+    /// The DevStyle profile for the current light/dark appearance.
+    @Environment(\.dsTheme) private var dsTheme
+
     @Bindable var model: AppModel
     @State private var collapsedIDs: Set<Int> = []
 
@@ -47,7 +51,7 @@ struct OutlinePanelView: View {
                     if headings.isEmpty {
                         Text(model.selectedID == nil ? "No note open" : "No headings in this note")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(dsTheme.surface(.muted))
                             .padding(8)
                     } else {
                         ForEach(headings) { heading in
@@ -77,7 +81,7 @@ struct OutlinePanelView: View {
                     } label: {
                         Image(systemName: collapsedIDs.contains(heading.id) ? "chevron.right" : "chevron.down")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(dsTheme.surface(.muted))
                             .frame(width: 12)
                     }
                     .buttonStyle(.plain)

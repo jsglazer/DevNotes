@@ -19,6 +19,10 @@ final class MacLineNumberGutter: NSView {
 
     private weak var textView: NSTextView?
     private weak var scrollView: NSScrollView?
+    /// The DevStyle profile's gutter colours (`gutter-bg`, `gutter-fg`, `border`).
+    var palette: EditorPalette = .builtin(dark: false) {
+        didSet { if palette != oldValue { needsDisplay = true } }
+    }
 
     init(textView: NSTextView, scrollView: NSScrollView) {
         self.textView = textView
@@ -35,11 +39,9 @@ final class MacLineNumberGutter: NSView {
     override func draw(_ dirtyRect: NSRect) {
         // Opaque background + trailing separator, so the strip reads as a distinct gutter and the
         // text's left inset never shows the window background through it.
-        NSColor.textBackgroundColor.setFill()
+        palette[.gutterBackground].setFill()
         bounds.fill()
-        NSColor.gray.withAlphaComponent(0.08).setFill()
-        bounds.fill()
-        NSColor.separatorColor.setStroke()
+        palette[.gutterBorder].setStroke()
         let separator = NSBezierPath()
         separator.move(to: NSPoint(x: bounds.maxX - 0.5, y: bounds.minY))
         separator.line(to: NSPoint(x: bounds.maxX - 0.5, y: bounds.maxY))
@@ -54,7 +56,7 @@ final class MacLineNumberGutter: NSView {
 
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular),
-            .foregroundColor: NSColor.secondaryLabelColor
+            .foregroundColor: palette[.gutterText]
         ]
 
         let string = textView.string as NSString

@@ -1,10 +1,14 @@
 import DevNotesCore
+import DevStyleKit
 import SwiftUI
 
 /// The collapsible left panel: search bar over the modified-date-sorted file list, with an optional
 /// heading-outline panel below it (`model.isOutlineVisible`, toggled from `EditorToolbar`). The
 /// sidebar itself collapses via ⌘B, bound by the root view.
 struct SidebarView: View {
+    /// The DevStyle profile for the current light/dark appearance.
+    @Environment(\.dsTheme) private var dsTheme
+
     @Bindable var model: AppModel
 
     /// Base file-name point size (one point larger than the previous `.body`). Fixed — the ⌘+/⌘-
@@ -48,13 +52,19 @@ struct SidebarView: View {
                 }
             }
             .listStyle(.sidebar)
+            // DevStyle: the sidebar sits on the profile's panel colour, not the system vibrancy.
+            .scrollContentBackground(.hidden)
+            .background(dsTheme.surface(.panel))
 
             if model.isOutlineVisible {
                 Divider()
                 OutlinePanelView(model: model)
                     .frame(maxHeight: 220)
+                    .background(dsTheme.surface(.panel))
             }
         }
+        // DevStyle interface font (`ui-font` at `ui-size`) for the file list, search and outline.
+        .font(dsTheme.interfaceFont())
         .toolbar {
             ToolbarItem {
                 Button {
@@ -75,7 +85,7 @@ struct SidebarView: View {
             if model.isPinned(summary.id) {
                 Image(systemName: "pin.fill")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(dsTheme.surface(.muted))
             }
             // File name only — the modified date is no longer shown in the list.
             Text(summary.title)
@@ -101,7 +111,7 @@ struct SidebarView: View {
                 } label: {
                     Text("Open note (title match)")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(dsTheme.surface(.muted))
                 }
                 .buttonStyle(.plain)
             } else {
@@ -114,7 +124,7 @@ struct SidebarView: View {
                 if model.isPinned(summary.id) {
                     Image(systemName: "pin.fill")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(dsTheme.surface(.muted))
                 }
                 Text(summary.title)
                     .font(.system(size: titleFontSize, weight: .bold))
@@ -135,12 +145,12 @@ struct SidebarView: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("\(occurrence.lineNumber)")
                     .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(dsTheme.surface(.muted))
                     .frame(minWidth: 20, alignment: .trailing)
                 Text(occurrence.snippet)
                     .font(.caption)
                     .lineLimit(1)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(dsTheme.surface(.text))
             }
         }
         .buttonStyle(.plain)

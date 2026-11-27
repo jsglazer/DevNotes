@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import DevNotesCore
+import DevStyleKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -22,7 +23,8 @@ enum Exporter {
               let url = savePanel(defaultName: fileName(model, ext: "pdf"), type: .pdf)
         else { return }
 
-        let attributes = StyleApplier().bodyAttributes(from: model.styleSheet)
+        // Printed on white: the light DevStyle profile's font and colours, plus the style box.
+        let attributes = StyleApplier(palette: EditorPalette(theme: model.style.light)).bodyAttributes(from: model.styleSheet)
         let attributed = NSAttributedString(string: model.editor.text, attributes: attributes)
 
         let pageWidth: CGFloat = 612 // US Letter (8.5" × 72)

@@ -15,6 +15,11 @@ let package = Package(
         // The OS shell (SwiftUI + TextKit 2 + CloudKit). Not part of the headless gate.
         .executable(name: "DevNotesApp", targets: ["DevNotesApp"])
     ],
+    dependencies: [
+        // Shared look for all my apps (https://github.com/jsglazer/devstyle): only the OS shell
+        // uses it; DevNotesCore stays free of it.
+        .package(url: "https://github.com/jsglazer/devstyle", exact: "1.0.3")
+    ],
     targets: [
         // MARK: - Pure core (no AppKit / UIKit / SwiftUI / CloudKit, no file/network I/O)
         .target(
@@ -27,7 +32,10 @@ let package = Package(
         // MARK: - OS shell
         .executableTarget(
             name: "DevNotesApp",
-            dependencies: ["DevNotesCore"],
+            dependencies: [
+                "DevNotesCore",
+                .product(name: "DevStyleKit", package: "devstyle")
+            ],
             resources: [
                 .process("Resources")
             ],

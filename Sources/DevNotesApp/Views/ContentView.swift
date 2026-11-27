@@ -1,4 +1,5 @@
 import DevNotesCore
+import DevStyleKit
 import SwiftUI
 
 /// Root layout.
@@ -9,6 +10,9 @@ import SwiftUI
 ///   presented as sheets rather than a split view, since NavigationSplitView's compact-width
 ///   collapse behaviour doesn't give a usable phone layout for this app.
 struct ContentView: View {
+    /// The DevStyle profile for the current light/dark appearance.
+    @Environment(\.dsTheme) private var dsTheme
+
     @Bindable var model: AppModel
     /// Re-pull cross-device pins and synced settings whenever the app becomes active — the live
     /// iCloud change notification only arrives while running, so a pin or an Editor Style change
@@ -101,6 +105,7 @@ struct ContentView: View {
             .frame(minWidth: 640, minHeight: 420)
         }
         .preferredColorScheme(model.theme.colorScheme)
+        .tint(dsTheme.surface(.accent))
     }
     #else
     /// The note-title + file-name row shown above `IOSTopBar` on both iPhone and iPad.
@@ -125,7 +130,7 @@ struct ContentView: View {
                 if let fileName = selectedID.displayFileName {
                     Text(fileName)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(dsTheme.surface(.muted))
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -170,7 +175,7 @@ struct ContentView: View {
                         onSearch: { isNotesListPresented = true }
                     )
                 }
-                .background(.bar)
+                .background(dsTheme.surface(.panel))
             }
             // The keyboard-dismiss button lives on the editor's UIKit `inputAccessoryView`
             // (see MarkdownTextView); a SwiftUI `.toolbar(placement: .keyboard)` never attached to
@@ -207,6 +212,7 @@ struct ContentView: View {
                 }
             }
             .preferredColorScheme(model.theme.colorScheme)
+            .tint(dsTheme.surface(.accent))
     }
 
     /// iPad layout: a persistent `NavigationSplitView` sidebar (file list + outline panel), the
@@ -227,7 +233,7 @@ struct ContentView: View {
                             onSearch: { withAnimation { model.columnVisibility = .all } }
                         )
                     }
-                    .background(.bar)
+                    .background(dsTheme.surface(.panel))
                 }
         }
         // Without a navigation title, NavigationSplitView renders no toolbar bar on iPadOS —
@@ -261,6 +267,7 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(model.theme.colorScheme)
+        .tint(dsTheme.surface(.accent))
     }
     #endif
 
@@ -278,6 +285,9 @@ struct ContentView: View {
 /// equivalent of the reference app's toolbar, mapped onto this app's actual feature set (no
 /// tags exist in DevNotesCore, so there's no tag row here).
 private struct IOSTopBar: View {
+    /// The DevStyle profile for the current light/dark appearance.
+    @Environment(\.dsTheme) private var dsTheme
+
     var editor: EditorViewModel
     /// Opens the notes-list sheet. `nil` on iPad, where the sidebar is always present so this
     /// circle button would be redundant.
@@ -311,7 +321,7 @@ private struct IOSTopBar: View {
             .font(.system(size: 19, weight: .medium))
             .padding(.horizontal, 19)
             .padding(.vertical, 12)
-            .background(Capsule().fill(Color.gray.opacity(0.15)))
+            .background(Capsule().fill(dsTheme.surface(.border).opacity(0.4)))
             Spacer()
         }
         .buttonStyle(.plain)
@@ -324,7 +334,7 @@ private struct IOSTopBar: View {
             Image(systemName: systemImage)
                 .font(.system(size: 20, weight: .medium))
                 .frame(width: 53, height: 53)
-                .background(Circle().fill(Color.gray.opacity(0.15)))
+                .background(Circle().fill(dsTheme.surface(.border).opacity(0.4)))
         }
         .help(help)
     }

@@ -27,18 +27,23 @@
 		4189445971E1A642500AAB1F /* FindState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E4F1346860E012E91CA6140 /* FindState.swift */; };
 		42A21882CDC652F4C7551BFF /* MergeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2F0B1922CE23BDBCA098662 /* MergeView.swift */; };
 		44E61C1935A81DAD293CF26D /* EditorPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = E34663D339352B81822546F8 /* EditorPane.swift */; };
+		461941E4786199AD8998BC95 /* DevStyleKit in Frameworks */ = {isa = PBXBuildFile; productRef = 086A7EA754C958529F4339BA /* DevStyleKit */; };
 		49283FCC05EBB80EEFA1E97C /* FileNoteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A24629D5B796D7A3F7C5DCC1 /* FileNoteStore.swift */; };
 		4F7FA118EA4D5D74BF8A1A51 /* EditorToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03974BA7354B2EECDAEE9388 /* EditorToolbar.swift */; };
 		50A20C604A834175739DFA81 /* FindReplaceBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 026ABCD0755341D4E5870253 /* FindReplaceBar.swift */; };
 		53A1D1B351449AEA9F059851 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 966D8EE4084AE8B2A77F02E7 /* ContentView.swift */; };
 		54B34B0EB085B6FBD9E0D1E9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1A860FB05EAB52091F7E732 /* Assets.xcassets */; };
+		5B7537A818DEBA87FCCA50DA /* EditorPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0918C5A25EBEF8B63347A510 /* EditorPalette.swift */; };
 		5BA5DF0D50244B5E12621C5E /* DevNotesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94A60EA2683E7A52725CD37D /* DevNotesApp.swift */; };
+		6C234CD42978D023DE2AEF5A /* AppModel+DevStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45B6461F50F210621CA8FBBE /* AppModel+DevStyle.swift */; };
 		7633176A58AACFF9193B4764 /* PreferenceSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98AB83FF210D52477B3C3FF3 /* PreferenceSync.swift */; };
 		76EC511C1A487046CD2F4C04 /* Exporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE46C25B88AA794F2EC223B5 /* Exporter.swift */; };
 		7B86C2358CB76E1ACE631E08 /* MarkdownHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 949B96DED5CC2D4B246D1DD0 /* MarkdownHighlighter.swift */; };
 		7D9765A721119240FE2FA5F7 /* UbiquityDownloadMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8125A764AE52C817FACC1DD4 /* UbiquityDownloadMonitor.swift */; };
 		7DF3D12B8DBE72288EC31BA1 /* DevNotesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94A60EA2683E7A52725CD37D /* DevNotesApp.swift */; };
+		908EABF003B2BDFE5CB923D8 /* EditorPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0918C5A25EBEF8B63347A510 /* EditorPalette.swift */; };
 		957B4D7FD1A76BAA4E3C0FC1 /* CloudKitSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05BDA9F5F7B3A8E23672923 /* CloudKitSyncService.swift */; };
+		979E101A4824857B0FF01B18 /* AppModel+DevStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45B6461F50F210621CA8FBBE /* AppModel+DevStyle.swift */; };
 		9927BCF03D9042A50CEAA42E /* EditorTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FD955216D44C4AF61765C73 /* EditorTextView.swift */; };
 		9B0349E5A97ABE1D06065530 /* SearchBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C40DA45CA4C483357AA0A0 /* SearchBarView.swift */; };
 		9C7373A46907EB7081818ED1 /* KeymapStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A7BBDD437765DB3570F6214 /* KeymapStore.swift */; };
@@ -54,8 +59,10 @@
 		B489CCD9376915E166296C00 /* FindReplaceBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 026ABCD0755341D4E5870253 /* FindReplaceBar.swift */; };
 		C3A02068ED29E1A780B31A51 /* DirectoryWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19AC917B06781CF791567829 /* DirectoryWatcher.swift */; };
 		C5CEE753953D7F396350F810 /* FindState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E4F1346860E012E91CA6140 /* FindState.swift */; };
+		C9C84565074CE39DD79B0B82 /* StyleSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B8A04E50DEF410D3C95DE6 /* StyleSettingsSection.swift */; };
 		CCD13E57E86E751EA519B6AE /* DevNotesCore in Frameworks */ = {isa = PBXBuildFile; productRef = 65B852DFA661A75457C78948 /* DevNotesCore */; };
 		CDE985F5B259641092F30AB5 /* OutlinePanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92D6397BC3DAC6FFC5150C0E /* OutlinePanelView.swift */; };
+		CF5FAF9F2ED0EBAD9D04D453 /* StyleSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B8A04E50DEF410D3C95DE6 /* StyleSettingsSection.swift */; };
 		D572009A6469620A88BCBF45 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EECFD32311AD536926457D89 /* AppModel.swift */; };
 		D666C440E8E5E8F56CC1EB3E /* EditorToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03974BA7354B2EECDAEE9388 /* EditorToolbar.swift */; };
 		D8306F8858AD7A297001A707 /* MarkdownHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 949B96DED5CC2D4B246D1DD0 /* MarkdownHighlighter.swift */; };
@@ -66,6 +73,7 @@
 		E50BC13A7454538FC54AE001 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EECFD32311AD536926457D89 /* AppModel.swift */; };
 		EE6CF05EFF07C0A845033E2E /* Platform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45CBA42A05533BE57D164B37 /* Platform.swift */; };
 		F5E6014573EBEF9773993E12 /* SearchBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C40DA45CA4C483357AA0A0 /* SearchBarView.swift */; };
+		F984E131BCE15F77A4BBB7CE /* DevStyleKit in Frameworks */ = {isa = PBXBuildFile; productRef = EC1D2E75F9EDD0150302CC90 /* DevStyleKit */; };
 		FF9CDA04A2BB550817D46576 /* MarkdownTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71566D09682A6781E0210572 /* MarkdownTextView.swift */; };
 /* End PBXBuildFile section */
 
@@ -73,10 +81,12 @@
 		026ABCD0755341D4E5870253 /* FindReplaceBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindReplaceBar.swift; sourceTree = "<group>"; };
 		03974BA7354B2EECDAEE9388 /* EditorToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorToolbar.swift; sourceTree = "<group>"; };
 		07E21273C76AF127D488862A /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		0918C5A25EBEF8B63347A510 /* EditorPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPalette.swift; sourceTree = "<group>"; };
 		19AC917B06781CF791567829 /* DirectoryWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectoryWatcher.swift; sourceTree = "<group>"; };
 		266C558014E2ED98542A0B55 /* StyleApplier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StyleApplier.swift; sourceTree = "<group>"; };
 		2C9CD00750279F380D3F8A1B /* DevNotes.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DevNotes.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3E4F1346860E012E91CA6140 /* FindState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindState.swift; sourceTree = "<group>"; };
+		45B6461F50F210621CA8FBBE /* AppModel+DevStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+DevStyle.swift"; sourceTree = "<group>"; };
 		45CBA42A05533BE57D164B37 /* Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Platform.swift; sourceTree = "<group>"; };
 		54443370DFE141913BD80CE1 /* AppCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCommands.swift; sourceTree = "<group>"; };
 		5DCCA3F4FE6B3683D5FA00C4 /* LineNumberRulerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineNumberRulerView.swift; sourceTree = "<group>"; };
@@ -95,6 +105,7 @@
 		A1A860FB05EAB52091F7E732 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A24629D5B796D7A3F7C5DCC1 /* FileNoteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileNoteStore.swift; sourceTree = "<group>"; };
 		A2C4BCB6CEA650E8A0BA6C28 /* DevNotes */ = {isa = PBXFileReference; lastKnownFileType = folder; name = DevNotes; path = .; sourceTree = SOURCE_ROOT; };
+		B5B8A04E50DEF410D3C95DE6 /* StyleSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StyleSettingsSection.swift; sourceTree = "<group>"; };
 		C2F0B1922CE23BDBCA098662 /* MergeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeView.swift; sourceTree = "<group>"; };
 		D05BDA9F5F7B3A8E23672923 /* CloudKitSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSyncService.swift; sourceTree = "<group>"; };
 		D9415E031840711DCEE435B1 /* EditorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorViewModel.swift; sourceTree = "<group>"; };
@@ -110,6 +121,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CCD13E57E86E751EA519B6AE /* DevNotesCore in Frameworks */,
+				461941E4786199AD8998BC95 /* DevStyleKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -118,6 +130,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				10E59DDA89053657AA718BC4 /* DevNotesCore in Frameworks */,
+				F984E131BCE15F77A4BBB7CE /* DevStyleKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -188,6 +201,7 @@
 			children = (
 				54443370DFE141913BD80CE1 /* AppCommands.swift */,
 				EECFD32311AD536926457D89 /* AppModel.swift */,
+				45B6461F50F210621CA8FBBE /* AppModel+DevStyle.swift */,
 				94A60EA2683E7A52725CD37D /* DevNotesApp.swift */,
 				45CBA42A05533BE57D164B37 /* Platform.swift */,
 			);
@@ -206,6 +220,7 @@
 				F7C40DA45CA4C483357AA0A0 /* SearchBarView.swift */,
 				78AFA6F523DB880932AA9022 /* SettingsView.swift */,
 				07E21273C76AF127D488862A /* SidebarView.swift */,
+				B5B8A04E50DEF410D3C95DE6 /* StyleSettingsSection.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -246,6 +261,7 @@
 		D5F157D61EB3D6BFA0089602 /* Editor */ = {
 			isa = PBXGroup;
 			children = (
+				0918C5A25EBEF8B63347A510 /* EditorPalette.swift */,
 				7FD955216D44C4AF61765C73 /* EditorTextView.swift */,
 				D9415E031840711DCEE435B1 /* EditorViewModel.swift */,
 				3E4F1346860E012E91CA6140 /* FindState.swift */,
@@ -276,6 +292,7 @@
 			name = DevNotes;
 			packageProductDependencies = (
 				9797B87FF1EB21760926BBF1 /* DevNotesCore */,
+				EC1D2E75F9EDD0150302CC90 /* DevStyleKit */,
 			);
 			productName = DevNotes;
 			productReference = 2C9CD00750279F380D3F8A1B /* DevNotes.app */;
@@ -296,6 +313,7 @@
 			name = "DevNotes-iOS";
 			packageProductDependencies = (
 				65B852DFA661A75457C78948 /* DevNotesCore */,
+				086A7EA754C958529F4339BA /* DevStyleKit */,
 			);
 			productName = "DevNotes-iOS";
 			productReference = 994BF6A1718A5BD6406A8404 /* DevNotes-iOS.app */;
@@ -330,6 +348,7 @@
 			mainGroup = 7BB6D92AEE5664BD36272464;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				A4A955AE98B6193F5701F1FD /* XCRemoteSwiftPackageReference "devstyle" */,
 				439800B1C6E6368A9526972C /* XCLocalSwiftPackageReference "." */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -368,11 +387,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				D91F2D71EFEBC1C7D52D5B25 /* AppCommands.swift in Sources */,
+				6C234CD42978D023DE2AEF5A /* AppModel+DevStyle.swift in Sources */,
 				D572009A6469620A88BCBF45 /* AppModel.swift in Sources */,
 				1F9515B7D040E76C0EBDB02F /* CloudKitSyncService.swift in Sources */,
 				53A1D1B351449AEA9F059851 /* ContentView.swift in Sources */,
 				7DF3D12B8DBE72288EC31BA1 /* DevNotesApp.swift in Sources */,
 				C3A02068ED29E1A780B31A51 /* DirectoryWatcher.swift in Sources */,
+				908EABF003B2BDFE5CB923D8 /* EditorPalette.swift in Sources */,
 				37F78C743F15704ADFC2BC1C /* EditorPane.swift in Sources */,
 				9927BCF03D9042A50CEAA42E /* EditorTextView.swift in Sources */,
 				D666C440E8E5E8F56CC1EB3E /* EditorToolbar.swift in Sources */,
@@ -394,6 +415,7 @@
 				B185B25417465230ADD162E9 /* SettingsView.swift in Sources */,
 				28B4CC099FC6294C920A6FDA /* SidebarView.swift in Sources */,
 				A6176ECE962FBBE348D28965 /* StyleApplier.swift in Sources */,
+				CF5FAF9F2ED0EBAD9D04D453 /* StyleSettingsSection.swift in Sources */,
 				7D9765A721119240FE2FA5F7 /* UbiquityDownloadMonitor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -403,11 +425,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				ADF79F5C4EE780C0FBE1F50E /* AppCommands.swift in Sources */,
+				979E101A4824857B0FF01B18 /* AppModel+DevStyle.swift in Sources */,
 				E50BC13A7454538FC54AE001 /* AppModel.swift in Sources */,
 				957B4D7FD1A76BAA4E3C0FC1 /* CloudKitSyncService.swift in Sources */,
 				24A8DD2CBDE0E51E9540D0FD /* ContentView.swift in Sources */,
 				5BA5DF0D50244B5E12621C5E /* DevNotesApp.swift in Sources */,
 				AF234A3D36733DDF2559BF46 /* DirectoryWatcher.swift in Sources */,
+				5B7537A818DEBA87FCCA50DA /* EditorPalette.swift in Sources */,
 				44E61C1935A81DAD293CF26D /* EditorPane.swift in Sources */,
 				1BC0C488410987031B3A911C /* EditorTextView.swift in Sources */,
 				4F7FA118EA4D5D74BF8A1A51 /* EditorToolbar.swift in Sources */,
@@ -429,6 +453,7 @@
 				35D096337F96DB28B3CA0944 /* SettingsView.swift in Sources */,
 				AC0EDF7A2AB5B0ACAE60DB1D /* SidebarView.swift in Sources */,
 				3999A5AF8F3EA37B02A52A32 /* StyleApplier.swift in Sources */,
+				C9C84565074CE39DD79B0B82 /* StyleSettingsSection.swift in Sources */,
 				A7BFBBE58F5628DAD282C81B /* UbiquityDownloadMonitor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -509,7 +534,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.32;
+				MARKETING_VERSION = 1.0.33;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -648,7 +673,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0.32;
+				MARKETING_VERSION = 1.0.33;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -698,7 +723,23 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		A4A955AE98B6193F5701F1FD /* XCRemoteSwiftPackageReference "devstyle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/jsglazer/devstyle";
+			requirement = {
+				kind = exactVersion;
+				version = 1.0.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		086A7EA754C958529F4339BA /* DevStyleKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A4A955AE98B6193F5701F1FD /* XCRemoteSwiftPackageReference "devstyle" */;
+			productName = DevStyleKit;
+		};
 		65B852DFA661A75457C78948 /* DevNotesCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = DevNotesCore;
@@ -706,6 +747,11 @@
 		9797B87FF1EB21760926BBF1 /* DevNotesCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = DevNotesCore;
+		};
+		EC1D2E75F9EDD0150302CC90 /* DevStyleKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A4A955AE98B6193F5701F1FD /* XCRemoteSwiftPackageReference "devstyle" */;
+			productName = DevStyleKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

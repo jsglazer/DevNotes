@@ -1,4 +1,5 @@
 import DevNotesCore
+import DevStyleKit
 import SwiftUI
 import UniformTypeIdentifiers
 #if os(macOS)
@@ -54,13 +55,34 @@ struct SettingsView: View {
         return formatter.string(from: Date())
     }
 
-    /// Bridges a `ColorPicker` (which works in `Color`) to a model property stored as a `#rrggbb`
-    /// hex string, so the current-line colours round-trip through the same hex the editor parses.
-    private func hexBinding(_ keyPath: ReferenceWritableKeyPath<AppModel, String>) -> Binding<Color> {
+    /// A colour override stored as hex: empty means "use the DevStyle profile's colour", which the
+    /// picker then shows. Picking a colour stores it; "Use profile colour" clears it again.
+    private func overrideBinding(_ keyPath: ReferenceWritableKeyPath<AppModel, String>, token: String, appearance: DSAppearance) -> Binding<Color> {
         Binding(
-            get: { Color(hexString: model[keyPath: keyPath]) ?? .yellow },
+            get: { Color(hexString: model[keyPath: keyPath]) ?? model.style.theme(for: appearance).color(token) },
             set: { model[keyPath: keyPath] = $0.hexString }
         )
+    }
+
+    /// A colour override row: the picker, plus a reset when the user has picked their own colour.
+    @ViewBuilder
+    private func overridePicker(
+        _ title: String,
+        _ keyPath: ReferenceWritableKeyPath<AppModel, String>,
+        token: String,
+        appearance: DSAppearance
+    ) -> some View {
+        HStack {
+            ColorPicker(title, selection: overrideBinding(keyPath, token: token, appearance: appearance), supportsOpacity: false)
+            if model[keyPath: keyPath].isEmpty == false {
+                Button("Use profile colour") { model[keyPath: keyPath] = "" }
+                    #if os(macOS)
+                    .buttonStyle(.link)
+                    #else
+                    .buttonStyle(.borderless)
+                    #endif
+            }
+        }
     }
 
     var body: some View {
@@ -109,6 +131,8 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
             }
 
+            StyleSettingsSection(model: model)
+
             Section("Editor") {
                 Toggle("Wrap text", isOn: $model.wrapText)
                 Toggle("Show line numbers", isOn: $model.showLineNumbers)
@@ -140,19 +164,19 @@ struct SettingsView: View {
             Section("Current Line") {
                 Toggle("Highlight the current line", isOn: $model.highlightCurrentLine)
                 if model.highlightCurrentLine {
-                    ColorPicker("Light theme colour", selection: hexBinding(\.currentLineColorLight), supportsOpacity: false)
-                    ColorPicker("Dark theme colour", selection: hexBinding(\.currentLineColorDark), supportsOpacity: false)
+                    overridePicker("Light theme colour", \.currentLineColorLight, token: "active-line", appearance: .light)
+                    overridePicker("Dark theme colour", \.currentLineColorDark, token: "active-line", appearance: .dark)
                 }
-                Text("Paints a background band behind the line your caret is on, using the colour for the active theme.")
+                Text("Paints a background band behind the line your caret is on. The colour comes from the style profile unless you pick your own.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("Highlight Similar") {
-                ColorPicker("Light theme colour", selection: hexBinding(\.similarColorLight), supportsOpacity: false)
-                ColorPicker("Dark theme colour", selection: hexBinding(\.similarColorDark), supportsOpacity: false)
-                Text("The background colour used by the toolbar's highlighter button to mark every occurrence of the selected text, per theme.")
+                overridePicker("Light theme colour", \.similarColorLight, token: "selection-match", appearance: .light)
+                overridePicker("Dark theme colour", \.similarColorDark, token: "selection-match", appearance: .dark)
+                Text("The background colour used by the toolbar's highlighter button to mark every occurrence of the selected text. It comes from the style profile unless you pick your own.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -311,9 +335,10 @@ struct SettingsView: View {
         Form {
             Section("Editor Style") {
                 Text(
-                    "Style the editor with one `token: value` per line. Only the tokens below are honoured "
-                        + "— anything else is safely ignored (never executed as CSS). See the README for the "
-                        + "full catalog and more examples."
+                    "The style profile (General ▸ Style) sets the editor's fonts and colours. To change "
+                        + "something in DevNotes only, add one `token: value` per line here: each token you set "
+                        + "wins over the profile. Only the tokens below are honoured — anything else is safely "
+                        + "ignored (never executed as CSS). See the README for the full catalog and more examples."
                 )
                     .font(.caption)
                     .foregroundStyle(.secondary)

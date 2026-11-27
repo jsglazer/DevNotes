@@ -1,4 +1,5 @@
 import DevNotesCore
+import DevStyleKit
 import SwiftUI
 
 /// The main editing pane: outline toolbar over the TextKit 2 editor.
@@ -6,8 +7,11 @@ struct EditorPane: View {
     @Bindable var model: AppModel
     /// Resolves the current-line band colour for the active theme (the native editor paints it).
     @Environment(\.colorScheme) private var colorScheme
+    /// The DevStyle profile for the current light/dark appearance (`.devStyle(store)` at the root).
+    @Environment(\.dsTheme) private var dsTheme
 
     var body: some View {
+        let palette = EditorPalette(theme: dsTheme)
         VStack(spacing: 0) {
             if model.selectedID == nil {
                 ContentUnavailablePlaceholder()
@@ -22,6 +26,7 @@ struct EditorPane: View {
                     onExportPDF: { Exporter.exportPDF(model: model) },
                     onCreateBackup: { Exporter.exportBackup(model: model) }
                 )
+                .background(dsTheme.surface(.panel))
                 Divider()
                 if model.find.isPresented {
                     FindReplaceBar(model: model)
@@ -42,22 +47,24 @@ struct EditorPane: View {
                     onZoomOut: model.zoomOut,
                     onZoomIn: model.zoomIn
                 )
+                .background(dsTheme.surface(.panel))
                 Divider()
                 #endif
                 MarkdownTextView(
                     text: Binding(get: { model.editor.text }, set: { model.editor.text = $0 }),
                     selection: Binding(get: { model.editor.selection }, set: { model.editor.selection = $0 }),
                     style: model.styleSheet,
+                    palette: palette,
                     wrapText: model.wrapText,
                     showLineNumbers: model.showLineNumbers,
                     spellCheck: model.spellCheck,
                     zoom: model.zoom,
-                    currentLineHighlight: model.currentLineColor(for: colorScheme),
+                    currentLineHighlight: model.currentLineColor(for: colorScheme, palette: palette),
                     bottomPadding: model.bottomPadding,
                     searchMatches: model.find.isPresented ? model.find.matches : [],
                     currentMatch: model.find.isPresented ? model.find.currentMatch : nil,
                     similarMatches: model.similarMatches,
-                    similarHighlightColor: model.similarHighlightColor(for: colorScheme),
+                    similarHighlightColor: model.similarHighlightColor(for: colorScheme, palette: palette),
                     focusRequest: model.editor.focusRequest,
                     undoRequest: model.editor.undoRequest,
                     scrollRequest: model.editor.scrollRequest,
@@ -79,6 +86,7 @@ struct EditorPane: View {
 /// toolbar's inset/divider layout. Counts come from the pure `TextStats`; this view holds no logic.
 private struct EditorStatusBar: View {
     var text: String
+    @Environment(\.dsTheme) private var dsTheme
 
     var body: some View {
         let stats = DevNotesCore.TextStats(text)
@@ -90,21 +98,25 @@ private struct EditorStatusBar: View {
             Text("\(stats.lines) \(stats.lines == 1 ? "line" : "lines")")
         }
         .font(.caption.monospacedDigit())
-        .foregroundStyle(.secondary)
+        .foregroundStyle(dsTheme.surface(.muted))
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
+        .background(dsTheme.surface(.panel))
     }
 }
 
 private struct ContentUnavailablePlaceholder: View {
+    @Environment(\.dsTheme) private var dsTheme
+
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: "doc.text")
                 .font(.largeTitle)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(dsTheme.surface(.muted))
             Text("Select or create a note")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(dsTheme.surface(.muted))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(dsTheme.color("editor-bg"))
     }
 }

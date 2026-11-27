@@ -79,6 +79,14 @@ struct AppCommands: Commands {
                 Text("Dark").tag(AppTheme.dark)
             }
 
+            // DevStyle: switch to a built-in light/dark pair (the shared style for every app while
+            // "Follow shared style" is on, otherwise DevNotes' own). Other profiles are in Settings.
+            Menu("Style Profile") {
+                ForEach(Self.styleFamilies, id: \.name) { family in
+                    Button(family.name) { try? model.chooseStyleProfiles(light: family.light, dark: family.dark) }
+                }
+            }
+
             Divider()
 
             // Text zoom for the editor + sidebar. ⌘+ / ⌘- / ⌘0, the usual document-zoom keys.
@@ -96,6 +104,14 @@ struct AppCommands: Commands {
             }
         }
     }
+
+    /// DevStyle's built-in pairs, offered in View ▸ Style Profile.
+    private static let styleFamilies: [(name: String, light: String, dark: String)] = [
+        ("Default", "default-light", "default-dark"),
+        ("Paper", "paper-light", "paper-dark"),
+        ("High Contrast", "high-contrast-light", "high-contrast-dark"),
+        ("Solarized", "solarized-light", "solarized-dark")
+    ]
 
     /// A menu button that runs a keymap action and carries that action's current shortcut.
     private func menuButton(_ title: String, _ action: KeymapAction) -> some View {
